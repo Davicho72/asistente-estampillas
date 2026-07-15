@@ -1,131 +1,148 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import io
 import os
+import pandas as pd
 
 # ---------------------- CONFIGURACIÓN ----------------------
 st.set_page_config(
-    page_title="Herramienta de Imágenes",
-    page_icon="🎨",
+    page_title="Catálogo de Estampillas",
+    page_icon="📇",
     layout="wide"
 )
 
-# ✅ Lectura segura compatible con Render y local
-API_KEY = os.getenv("GEMINI_API_KEY")
+# ✅ Lectura segura de tu variable en Render
+API_KEY = os.getenv("GOOGLE_API_KEY")
 if not API_KEY:
     try:
-        API_KEY = st.secrets.get("GEMINI_API_KEY")
-    except FileNotFoundError:
+        API_KEY = st.secrets.get("GOOGLE_API_KEY")
+    except:
         API_KEY = None
 
 if not API_KEY:
-    st.error("⚠️ Falta configurar la variable GEMINI_API_KEY en Render.")
+    st.error("⚠️ Falta configurar GOOGLE_API_KEY en Render.")
     st.stop()
 
 genai.configure(api_key=API_KEY)
 modelo = genai.GenerativeModel("gemini-2.5-flash")
 
-# ---------------------- FUNCIÓN ANALIZAR IMAGEN ----------------------
-def analizar_imagen(imagen):
+# ---------------------- FUNCIÓN DE ANÁLISIS ----------------------
+def analizar_estampilla(imagen):
     try:
         img_byte_arr = io.BytesIO()
         imagen.save(img_byte_arr, format=imagen.format or "JPEG")
         contenido = [
-            "Describe detalladamente todo lo que veas en esta imagen:",
+            "Analiza esta estampilla postal y devuelve SOLO los datos en este formato exacto:",
+            "País: ", "Año: ", "Valor Facial: ", "Temática: ", "Estado: ", "Color Principal: ",
             {"mime_type": f"image/{(imagen.format or 'jpeg').lower()}", "data": img_byte_arr.getvalue()}
         ]
         respuesta = modelo.generate_content(contenido)
         respuesta.resolve()
-        return respuesta.text
+        texto = respuesta.text
+
+        # Extracción ordenada para la tabla
+        datos = {
+            "País": "No detectado",
+            "Año": "No detectado",
+            "Valor Facial": "No detectado",
+            "Temática": "No detectado",
+            "Estado": "No detectado",
+            "Color Principal": "No detectado"
+        }
+
+        for linea in texto.split("\n"):
+            if "País" in linea:
+                datos["País"] = linea.split(":", 1)[-1].strip()
+            elif "Año" in linea:
+                datos["Año"] = linea.split(":", 1)[-1].strip()
+            elif "Valor" in linea:
+                datos["Valor Facial"] = linea.split(":", 1)[-1].strip()
+            elif "Temática" in linea or "Tema" in linea:
+                datos["Temática"] = linea.split(":", 1)[-1].strip()
+            elif "Estado" in linea:
+                datos["Estado"] = linea.split(":", 1)[-1].strip()
+            elif "Color" in linea:
+                datos["Color Principal"] = linea.split(":", 1)[-1].strip()
+
+        return datos
     except Exception as e:
-        return f"Error: {str(e)}"
+        return {"Error": f"Fallo al analizar: {str(e)}"}
 
-# ---------------------- FUNCIÓN ESTAMPILLA ----------------------
-def generar_estampilla(imagen, texto, posicion, tamaño=30, opacidad=120):
-    img = imagen.convert("RGBA")
-    capa = Image.new("RGBA", img.size, (255,255,255,0))
-    dibujo = ImageDraw.Draw(capa)
-
-    try:
-        fuente = ImageFont.truetype("arial.ttf", tamaño)
-    except:
-        fuente = ImageFont.load_default(size=tamaño)
-
-    ancho_texto, alto_texto = dibujo.textbbox((0,0), texto, font=fuente)[2:4]
-    ancho_img, alto_img = img.size
-    margen = 20
-
-    if posicion == "Arriba izquierda":
-        x, y = margen, margen
-    elif posicion == "Arriba derecha":
-        x, y = ancho_img - ancho_texto - margen, margen
-    elif posicion == "Abajo izquierda":
-        x, y = margen, alto_img - alto_texto - margen
-    elif posicion == "Abajo derecha":
-        x, y = ancho_img - ancho_texto - margen, alto_img - alto_texto - margen
-    else:
-        x, y = (ancho_img - ancho_texto)//2, (alto_img - alto_texto)//2
-
-    dibujo.text((x, y), texto, fill=(255,255,255,opacidad), font=fuente)
-    final = Image.alpha_composite(img, capa).convert("RGB")
-    return final
+# ---------------------- INICIO DE DATOS PERMANENTES ----------------------
+# Guardamos los datos en la sesión para que no se borren al recargar
+if "catalogo" not in st.session_state:
+    st.session_state.catalogo = []
 
 # ---------------------- INTERFAZ ----------------------
-st.title("🎨 Analizador + Estampillas")
+st.title("📇 Catálogo y Análisis de Estampillas")
 
-pestaña1, pestaña2 = st.tabs(["📷 Analizar Imagen", "🖌️ Asistente de Estampillas"])
+# Subida de imágenes
+st.subheader("1. Sube tus estampillas para analizarlas")
+archivos = st.file_uploader(
+    "Selecciona una o varias imágenes",
+    type=["jpg", "jpeg", "png", "webp"],
+    accept_multiple_files=True,
+    key="subir_estampillas"
+)
 
-# Pestaña 1
-with pestaña1:
-    st.subheader("Sube una imagen para describirla")
-    archivo = st.file_uploader("Selecciona imagen", type=["jpg","jpeg","png","webp"], key="analizar")
-
-    if archivo:
+# Procesar imágenes
+if archivos:
+    progreso = st.progress(0)
+    for i, archivo in enumerate(archivos):
+        st.info(f"Analizando estampilla {i+1} de {len(archivos)}...")
         img = Image.open(archivo)
-        st.image(img, caption="Imagen cargada", width=500)
+        st.image(img, width=280, caption=f"Estampilla {i+1}")
 
-        if st.button("🔍 Analizar", key="boton1"):
-            with st.spinner("Procesando..."):
-                res = analizar_imagen(img)
-                st.success("✅ Listo!")
-                st.write(res)
+        # Analizar y agregar al catálogo
+        datos_estampa = analizar_estampilla(img)
+        st.session_state.catalogo.append(datos_estampa)
+        progreso.progress((i+1)/len(archivos))
 
-# Pestaña 2
-with pestaña2:
-    st.subheader("Agrega tu marca de agua")
-    archivo_estampa = st.file_uploader("Selecciona imagen", type=["jpg","jpeg","png","webp"], key="estampa")
+    st.success("✅ Todas las estampillas han sido analizadas y guardadas!")
 
-    if archivo_estampa:
-        img_original = Image.open(archivo_estampa)
-        st.image(img_original, caption="Imagen original", width=500)
+# Mostrar tabla ordenada
+st.subheader("2. Tabla de Estampillas Guardadas")
+if st.session_state.catalogo:
+    # Crear DataFrame ordenado por columnas
+    df = pd.DataFrame(st.session_state.catalogo)
+    # Ordenar columnas en el orden que queremos
+    columnas_orden = ["País", "Año", "Valor Facial", "Temática", "Estado", "Color Principal"]
+    df = df.reindex(columns=columnas_orden)
 
-        texto = st.text_input("Texto:", value="© Mi Marca")
-        pos = st.selectbox("Posición:", ["Abajo derecha", "Abajo izquierda", "Arriba derecha", "Arriba izquierda", "Centrado"])
-        tam = st.slider("Tamaño:", 10, 80, 30)
-        opac = st.slider("Transparencia:", 20, 255, 100)
+    # Mostrar tabla limpia
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
-        if st.button("✨ Aplicar estampilla", key="boton2"):
-            with st.spinner("Aplicando..."):
-                img_final = generar_estampilla(img_original, texto, pos, tam, opac)
-                st.success("✅ Hecho!")
-                st.image(img_final, caption="Imagen final", width=500)
+    # Opciones de guardado
+    st.subheader("3. Guardar tu catálogo")
+    col1, col2 = st.columns(2)
 
-                buffer = io.BytesIO()
-                img_final.save(buffer, format="JPEG", quality=90)
-                st.download_button(
-                    label="💾 Descargar",
-                    data=buffer.getvalue(),
-                    file_name="imagen_final.jpg",
-                    mime="image/jpeg"
-                )
+    with col1:
+        # Descargar en CSV
+        csv = df.to_csv(index=False, encoding="utf-8-sig")
+        st.download_button(
+            label="💾 Descargar en CSV (Excel)",
+            data=csv,
+            file_name="catalogo_estampillas.csv",
+            mime="text/csv"
+        )
 
-# Ver modelos
-with st.expander("ℹ️ Modelos disponibles"):
-    if st.button("Cargar modelos"):
-        try:
-            for m in genai.list_models():
-                if "generateContent" in m.supported_generation_methods:
-                    st.write(f"- {m.name}")
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
+    with col2:
+        # Descargar en Excel
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Estampillas")
+        st.download_button(
+            label="📊 Descargar en Excel",
+            data=excel_buffer.getvalue(),
+            file_name="catalogo_estampillas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    # Botón para limpiar el catálogo
+    if st.button("🗑️ Limpiar catálogo actual"):
+        st.session_state.catalogo = []
+        st.rerun()
+
+else:
+    st.info("Aún no hay estampillas guardadas. Sube tus imágenes para empezar.")
