@@ -25,7 +25,8 @@ if not API_KEY:
     st.stop()
 
 genai.configure(api_key=API_KEY)
-modelo = genai.GenerativeModel("gemini-2.5-flash")
+# ✅ Modelo actualizado y disponible: gemini-3.5-flash
+modelo = genai.GenerativeModel("gemini-3.5-flash")
 
 # ---------------------- FUNCIÓN ANALIZAR ESTAMPILLA ----------------------
 def analizar_estampilla(imagen):
@@ -130,19 +131,15 @@ with pestaña2:
     st.subheader("Habla o escribe sobre tus estampillas")
     st.markdown("✅ Escribe tu pregunta o usa el micrófono ✅ Respuesta escrita y hablada")
 
-    # Reproducción de voz integrada en el navegador (sin librerías extra)
     st.html("""
     <p style="margin:10px 0;">Usa el chat de texto abajo, y pulsa 🔊 para escuchar las respuestas:</p>
     """)
 
-    # Entrada de texto
     pregunta = st.chat_input("Escribe aquí tu pregunta sobre estampillas...")
 
-    # Procesar pregunta
     if pregunta:
         st.session_state.historial_chat.append({"rol": "usuario", "texto": pregunta})
 
-        # Contexto con tu catálogo completo
         contexto = f"""Eres un experto en estampillas postales y coleccionismo.
         Mi catálogo actual es: {st.session_state.catalogo if st.session_state.catalogo else 'Aún no he agregado estampillas al catálogo.'}
         Responde de forma clara, sencilla y breve, en español correcto.
@@ -151,22 +148,19 @@ with pestaña2:
         respuesta = modelo.generate_content(contexto).text
         st.session_state.historial_chat.append({"rol": "asistente", "texto": respuesta})
 
-    # Mostrar historial del chat
     for msg in st.session_state.historial_chat:
         if msg["rol"] == "usuario":
             st.chat_message("👤 Tú").write(msg["texto"])
         else:
             st.chat_message("🤖 Asistente").write(msg["texto"])
-            # Botón para escuchar la respuesta (funciona en cualquier navegador)
             texto_seguro = msg["texto"].replace("'", "\\'").replace('"', '\\"')
             st.markdown(f"""
             <button onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('{texto_seguro}'))"
-            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px; margin:5px 0;">
+            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:5px; cursor:pointer; font-size:13px; margin:5px 0;">
             🔊 Escuchar esta respuesta
             </button>
             """, unsafe_allow_html=True)
 
-    # Limpiar chat
     if st.button("🗑️ Borrar historial del chat"):
         st.session_state.historial_chat = []
         st.rerun()
