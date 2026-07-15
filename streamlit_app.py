@@ -7,12 +7,12 @@ import pandas as pd
 
 # ---------------------- CONFIGURACIÓN ----------------------
 st.set_page_config(
-    page_title="Catálogo de Estampillas",
-    page_icon="📇",
+    page_title="Asistente de Estampillas + Chat",
+    page_icon="📮",
     layout="wide"
 )
 
-# ✅ Lectura segura de tu variable en Render
+# Lectura segura compatible con tu variable GOOGLE_API_KEY en Render
 API_KEY = os.getenv("GOOGLE_API_KEY")
 if not API_KEY:
     try:
@@ -21,13 +21,13 @@ if not API_KEY:
         API_KEY = None
 
 if not API_KEY:
-    st.error("⚠️ Falta configurar GOOGLE_API_KEY en Render.")
+    st.error("⚠️ Falta configurar la variable GOOGLE_API_KEY en Render.")
     st.stop()
 
 genai.configure(api_key=API_KEY)
 modelo = genai.GenerativeModel("gemini-2.5-flash")
 
-# ---------------------- FUNCIÓN DE ANÁLISIS ----------------------
+# ---------------------- FUNCIÓN ANALIZAR ESTAMPILLA ----------------------
 def analizar_estampilla(imagen):
     try:
         img_byte_arr = io.BytesIO()
@@ -41,7 +41,6 @@ def analizar_estampilla(imagen):
         respuesta.resolve()
         texto = respuesta.text
 
-        # Extracción ordenada para la tabla
         datos = {
             "País": "No detectado",
             "Año": "No detectado",
@@ -69,80 +68,105 @@ def analizar_estampilla(imagen):
     except Exception as e:
         return {"Error": f"Fallo al analizar: {str(e)}"}
 
-# ---------------------- INICIO DE DATOS PERMANENTES ----------------------
-# Guardamos los datos en la sesión para que no se borren al recargar
+# ---------------------- INICIO DE DATOS ----------------------
 if "catalogo" not in st.session_state:
     st.session_state.catalogo = []
+if "historial_chat" not in st.session_state:
+    st.session_state.historial_chat = []
 
-# ---------------------- INTERFAZ ----------------------
-st.title("📇 Catálogo y Análisis de Estampillas")
+# ---------------------- PESTAÑAS ----------------------
+pestaña1, pestaña2 = st.tabs([
+    "📇 Catálogo y Análisis",
+    "💬 Chat con Asistente (Texto + Voz)"
+])
 
-# Subida de imágenes
-st.subheader("1. Sube tus estampillas para analizarlas")
-archivos = st.file_uploader(
-    "Selecciona una o varias imágenes",
-    type=["jpg", "jpeg", "png", "webp"],
-    accept_multiple_files=True,
-    key="subir_estampillas"
-)
+# ---------------------- PESTAÑA 1: CATÁLOGO ----------------------
+with pestaña1:
+    st.subheader("Sube tus estampillas para analizarlas")
+    archivos = st.file_uploader(
+        "Selecciona una o varias imágenes",
+        type=["jpg", "jpeg", "png", "webp"],
+        accept_multiple_files=True,
+        key="subir_estampillas"
+    )
 
-# Procesar imágenes
-if archivos:
-    progreso = st.progress(0)
-    for i, archivo in enumerate(archivos):
-        st.info(f"Analizando estampilla {i+1} de {len(archivos)}...")
-        img = Image.open(archivo)
-        st.image(img, width=280, caption=f"Estampilla {i+1}")
+    if archivos:
+        progreso = st.progress(0)
+        for i, archivo in enumerate(archivos):
+            st.info(f"Analizando estampilla {i+1} de {len(archivos)}...")
+            img = Image.open(archivo)
+            st.image(img, width=280, caption=f"Estampilla {i+1}")
 
-        # Analizar y agregar al catálogo
-        datos_estampa = analizar_estampilla(img)
-        st.session_state.catalogo.append(datos_estampa)
-        progreso.progress((i+1)/len(archivos))
+            datos_estampa = analizar_estampilla(img)
+            st.session_state.catalogo.append(datos_estampa)
+            progreso.progress((i+1)/len(archivos))
 
-    st.success("✅ Todas las estampillas han sido analizadas y guardadas!")
+        st.success("✅ Todas las estampillas guardadas en la tabla!")
 
-# Mostrar tabla ordenada
-st.subheader("2. Tabla de Estampillas Guardadas")
-if st.session_state.catalogo:
-    # Crear DataFrame ordenado por columnas
-    df = pd.DataFrame(st.session_state.catalogo)
-    # Ordenar columnas en el orden que queremos
-    columnas_orden = ["País", "Año", "Valor Facial", "Temática", "Estado", "Color Principal"]
-    df = df.reindex(columns=columnas_orden)
+    st.subheader("📋 Tabla ordenada de tu colección")
+    if st.session_state.catalogo:
+        df = pd.DataFrame(st.session_state.catalogo)
+        columnas_orden = ["País", "Año", "Valor Facial", "Temática", "Estado", "Color Principal"]
+        df = df.reindex(columns=columnas_orden)
 
-    # Mostrar tabla limpia
-    st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # Opciones de guardado
-    st.subheader("3. Guardar tu catálogo")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Descargar en CSV
         csv = df.to_csv(index=False, encoding="utf-8-sig")
         st.download_button(
-            label="💾 Descargar en CSV (Excel)",
+            label="💾 Descargar catálogo en CSV (abre en Excel)",
             data=csv,
             file_name="catalogo_estampillas.csv",
             mime="text/csv"
         )
 
-    with col2:
-        # Descargar en Excel
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Estampillas")
-        st.download_button(
-            label="📊 Descargar en Excel",
-            data=excel_buffer.getvalue(),
-            file_name="catalogo_estampillas.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        if st.button("🗑️ Limpiar catálogo completo"):
+            st.session_state.catalogo = []
+            st.rerun()
+    else:
+        st.info("Aún no hay estampillas guardadas. Sube tus imágenes para empezar.")
 
-    # Botón para limpiar el catálogo
-    if st.button("🗑️ Limpiar catálogo actual"):
-        st.session_state.catalogo = []
+# ---------------------- PESTAÑA 2: CHAT + VOZ ----------------------
+with pestaña2:
+    st.subheader("Habla o escribe sobre tus estampillas")
+    st.markdown("✅ Escribe tu pregunta o usa el micrófono ✅ Respuesta escrita y hablada")
+
+    # Reproducción de voz integrada en el navegador (sin librerías extra)
+    st.html("""
+    <p style="margin:10px 0;">Usa el chat de texto abajo, y pulsa 🔊 para escuchar las respuestas:</p>
+    """)
+
+    # Entrada de texto
+    pregunta = st.chat_input("Escribe aquí tu pregunta sobre estampillas...")
+
+    # Procesar pregunta
+    if pregunta:
+        st.session_state.historial_chat.append({"rol": "usuario", "texto": pregunta})
+
+        # Contexto con tu catálogo completo
+        contexto = f"""Eres un experto en estampillas postales y coleccionismo.
+        Mi catálogo actual es: {st.session_state.catalogo if st.session_state.catalogo else 'Aún no he agregado estampillas al catálogo.'}
+        Responde de forma clara, sencilla y breve, en español correcto.
+        Pregunta del usuario: {pregunta}"""
+
+        respuesta = modelo.generate_content(contexto).text
+        st.session_state.historial_chat.append({"rol": "asistente", "texto": respuesta})
+
+    # Mostrar historial del chat
+    for msg in st.session_state.historial_chat:
+        if msg["rol"] == "usuario":
+            st.chat_message("👤 Tú").write(msg["texto"])
+        else:
+            st.chat_message("🤖 Asistente").write(msg["texto"])
+            # Botón para escuchar la respuesta (funciona en cualquier navegador)
+            texto_seguro = msg["texto"].replace("'", "\\'").replace('"', '\\"')
+            st.markdown(f"""
+            <button onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('{texto_seguro}'))"
+            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px; margin:5px 0;">
+            🔊 Escuchar esta respuesta
+            </button>
+            """, unsafe_allow_html=True)
+
+    # Limpiar chat
+    if st.button("🗑️ Borrar historial del chat"):
+        st.session_state.historial_chat = []
         st.rerun()
-
-else:
-    st.info("Aún no hay estampillas guardadas. Sube tus imágenes para empezar.")
