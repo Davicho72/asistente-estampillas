@@ -1,65 +1,57 @@
 import streamlit as st
-from dashscope import MultiModalConversation
+from groq import Groq
 from PIL import Image
 import io
 import os
 import pandas as pd
+import base64
 import time
 
 # ---------------------- CONFIGURACIÓN ----------------------
 st.set_page_config(
-    page_title="Asistente de Estampillas - Qwen",
+    page_title="Asistente de Estampillas",
     page_icon="📮",
     layout="wide"
 )
 
 # Lectura segura de tu variable en Render
-API_KEY = os.getenv("DASHSCOPE_API_KEY")
+API_KEY = os.getenv("GROQ_API_KEY")
 if not API_KEY:
     try:
-        API_KEY = st.secrets.get("DASHSCOPE_API_KEY")
+        API_KEY = st.secrets.get("GROQ_API_KEY")
     except:
         API_KEY = None
 
 if not API_KEY:
-    st.error("⚠️ Falta configurar DASHSCOPE_API_KEY en Render.")
+    st.error("⚠️ Falta configurar GROQ_API_KEY en Render.")
     st.stop()
+
+cliente = Groq(api_key=API_KEY)
 
 # ---------------------- FUNCIÓN ANALIZAR ESTAMPILLA ----------------------
 def analizar_estampilla(imagen):
     try:
         img_byte_arr = io.BytesIO()
         imagen.save(img_byte_arr, format=imagen.format or "JPEG")
-        contenido_imagen = img_byte_arr.getvalue()
+        img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
-        mensajes = [
-            {
-                "role": "user",
-                "content": [
-                    {"text": "Analiza esta estampilla postal y devuelve SOLO los datos en este formato exacto, sin explicaciones extra:"},
-                    {"text": "País: "},
-                    {"text": "Año: "},
-                    {"text": "Valor Facial: "},
-                    {"text": "Temática: "},
-                    {"text": "Estado de conservación: "},
-                    {"text": "Color Principal: "},
-                    {"image": contenido_imagen}
-                ]
-            }
-        ]
-
-        respuesta = MultiModalConversation.call(
-            model="qwen2.5-vl-7b-instruct",
-            messages=mensajes,
-            api_key=API_KEY
+        respuesta = cliente.chat.completions.create(
+            model="llama-3.2-90b-vision-instruct",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Analiza esta estampilla postal y devuelve SOLO los datos en este formato exacto, sin explicaciones extra:\nPaís: \nAño: \nValor Facial: \nTemática: \nEstado de conservación: \nColor Principal:"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}}
+                    ]
+                }
+            ],
+            temperature=0.2,
+            max_tokens=1024
         )
 
-        if respuesta.get("status_code") != 200:
-            return {"Error": f"Fallo: {respuesta.get('message', 'Error desconocido')}"}
+        texto = respuesta.choices[0].message.content
 
-        texto = respuesta["output"]["choices"][0]["message"]["content"][0]["text"]
-
-        # Extracción ordenada para la tabla
         datos = {
             "País": "No detectado",
             "Año": "No detectado",
@@ -95,17 +87,14 @@ def responder_chat(mensaje, catalogo):
         Responde de forma clara, sencilla y breve, en español correcto.
         Pregunta: {mensaje}"""
 
-        mensajes = [{"role": "user", "content": [{"text": contexto}]}]
-        respuesta = MultiModalConversation.call(
-            model="qwen-turbo",
-            messages=mensajes,
-            api_key=API_KEY
+        respuesta = cliente.chat.completions.create(
+            model="llama-3.2-70b-instruct",
+            messages=[{"role": "user", "content": contexto}],
+            temperature=0.3,
+            max_tokens=1024
         )
 
-        if respuesta.get("status_code") != 200:
-            return f"Error: {respuesta.get('message', 'No se pudo obtener respuesta')}"
-
-        return respuesta["output"]["choices"][0]["message"]["content"][0]["text"]
+        return respuesta.choices[0].message.content
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -141,7 +130,7 @@ with pestaña1:
             datos_estampa = analizar_estampilla(img)
             st.session_state.catalogo.append(datos_estampa)
             progreso.progress((i+1)/len(archivos))
-            time.sleep(0.5)  # Pausa para respetar límites
+            time.sleep(0.3)
 
         st.success("✅ Todas las estampillas guardadas en la tabla!")
 
@@ -187,7 +176,7 @@ with pestaña2:
             texto_seguro = msg["texto"].replace("'", "\\'").replace('"', '\\"')
             st.markdown(f"""
             <button onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('{texto_seguro}'))"
-            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:5px; cursor:pointer; font-size:13px; margin:5px 0;">
+            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px; margin:5px 0;">
             🔊 Escuchar respuesta
             </button>
             """, unsafe_allow_html=True)
