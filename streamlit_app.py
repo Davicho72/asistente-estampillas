@@ -4,24 +4,29 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import os
 
-# ---------------------- CONFIGURACIÓN GENERAL ----------------------
+# ---------------------- CONFIGURACIÓN ----------------------
 st.set_page_config(
-    page_title="Herramienta Completa de Imágenes",
+    page_title="Herramienta de Imágenes",
     page_icon="🎨",
     layout="wide"
 )
 
-# Configuración segura de la clave API (sin escribirla directamente)
-API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+# ✅ Lectura segura compatible con Render y local
+API_KEY = os.getenv("GEMINI_API_KEY")
+if not API_KEY:
+    try:
+        API_KEY = st.secrets.get("GEMINI_API_KEY")
+    except FileNotFoundError:
+        API_KEY = None
 
 if not API_KEY:
-    st.error("⚠️ Falta configurar la clave API de Google. Revisa los pasos anteriores.")
+    st.error("⚠️ Falta configurar la variable GEMINI_API_KEY en Render.")
     st.stop()
 
 genai.configure(api_key=API_KEY)
 modelo = genai.GenerativeModel("gemini-2.5-flash")
 
-# ---------------------- FUNCIÓN 1: ANALIZAR IMAGEN ----------------------
+# ---------------------- FUNCIÓN ANALIZAR IMAGEN ----------------------
 def analizar_imagen(imagen):
     try:
         img_byte_arr = io.BytesIO()
@@ -34,27 +39,23 @@ def analizar_imagen(imagen):
         respuesta.resolve()
         return respuesta.text
     except Exception as e:
-        return f"Error al analizar: {str(e)}"
+        return f"Error: {str(e)}"
 
-# ---------------------- FUNCIÓN 2: AGREGAR ESTAMPILLA / MARCA DE AGUA ----------------------
+# ---------------------- FUNCIÓN ESTAMPILLA ----------------------
 def generar_estampilla(imagen, texto, posicion, tamaño=30, opacidad=120):
-    # Convertimos a formato compatible con transparencia
     img = imagen.convert("RGBA")
-    capa_estampa = Image.new("RGBA", img.size, (255, 255, 255, 0))
-    dibujo = ImageDraw.Draw(capa_estampa)
+    capa = Image.new("RGBA", img.size, (255,255,255,0))
+    dibujo = ImageDraw.Draw(capa)
 
-    # Cargar fuente (usa Arial si existe, si no la predeterminada)
     try:
         fuente = ImageFont.truetype("arial.ttf", tamaño)
     except:
         fuente = ImageFont.load_default(size=tamaño)
 
-    # Calcular dimensiones del texto y la imagen
-    ancho_texto, alto_texto = dibujo.textbbox((0, 0), texto, font=fuente)[2:4]
+    ancho_texto, alto_texto = dibujo.textbbox((0,0), texto, font=fuente)[2:4]
     ancho_img, alto_img = img.size
     margen = 20
 
-    # Definir posición exacta
     if posicion == "Arriba izquierda":
         x, y = margen, margen
     elif posicion == "Arriba derecha":
@@ -63,110 +64,68 @@ def generar_estampilla(imagen, texto, posicion, tamaño=30, opacidad=120):
         x, y = margen, alto_img - alto_texto - margen
     elif posicion == "Abajo derecha":
         x, y = ancho_img - ancho_texto - margen, alto_img - alto_texto - margen
-    else:  # Centrado
-        x, y = (ancho_img - ancho_texto) // 2, (alto_img - alto_texto) // 2
+    else:
+        x, y = (ancho_img - ancho_texto)//2, (alto_img - alto_texto)//2
 
-    # Dibujar la estampilla y unir capas
-    dibujo.text((x, y), texto, fill=(255, 255, 255, opacidad), font=fuente)
-    imagen_final = Image.alpha_composite(img, capa_estampa).convert("RGB")
-    return imagen_final
+    dibujo.text((x, y), texto, fill=(255,255,255,opacidad), font=fuente)
+    final = Image.alpha_composite(img, capa).convert("RGB")
+    return final
 
-# ---------------------- INTERFAZ DE USUARIO ----------------------
-st.title("🎨 Analizador de Imágenes + Asistente de Estampillas")
+# ---------------------- INTERFAZ ----------------------
+st.title("🎨 Analizador + Estampillas")
 
-# Separamos las funciones en pestañas claras
-pestaña_analizar, pestaña_estampillas = st.tabs([
-    "📷 Analizar Imagen",
-    "🖌️ Asistente de Estampillas"
-])
+pestaña1, pestaña2 = st.tabs(["📷 Analizar Imagen", "🖌️ Asistente de Estampillas"])
 
-# ---------------------- PESTAÑA 1: ANALIZADOR ----------------------
-with pestaña_analizar:
-    st.subheader("Sube una imagen y obtén su descripción detallada")
-    archivo_analizar = st.file_uploader(
-        "Selecciona una imagen",
-        type=["jpg", "jpeg", "png", "webp"],
-        key="cargador_analizar"
-    )
+# Pestaña 1
+with pestaña1:
+    st.subheader("Sube una imagen para describirla")
+    archivo = st.file_uploader("Selecciona imagen", type=["jpg","jpeg","png","webp"], key="analizar")
 
-    if archivo_analizar is not None:
-        imagen_analizar = Image.open(archivo_analizar)
-        # Tamaño fijo mediano para no ocupar toda la pantalla
-        st.image(
-            imagen_analizar,
-            caption="Imagen cargada",
-            width=500
-        )
+    if archivo:
+        img = Image.open(archivo)
+        st.image(img, caption="Imagen cargada", width=500)
 
-        if st.button("🔍 Iniciar análisis", key="boton_analizar"):
-            with st.spinner("La IA está examinando la imagen..."):
-                resultado = analizar_imagen(imagen_analizar)
-                if "Error" in resultado:
-                    st.error(resultado)
-                else:
-                    st.success("✅ Análisis completado!")
-                    st.subheader("Resultado:")
-                    st.write(resultado)
+        if st.button("🔍 Analizar", key="boton1"):
+            with st.spinner("Procesando..."):
+                res = analizar_imagen(img)
+                st.success("✅ Listo!")
+                st.write(res)
 
-# ---------------------- PESTAÑA 2: ESTAMPILLAS ----------------------
-with pestaña_estampillas:
-    st.subheader("Agrega tu marca de agua o estampilla personalizada")
-    archivo_estampa = st.file_uploader(
-        "Selecciona la imagen para modificar",
-        type=["jpg", "jpeg", "png", "webp"],
-        key="cargador_estampa"
-    )
+# Pestaña 2
+with pestaña2:
+    st.subheader("Agrega tu marca de agua")
+    archivo_estampa = st.file_uploader("Selecciona imagen", type=["jpg","jpeg","png","webp"], key="estampa")
 
-    if archivo_estampa is not None:
-        imagen_original = Image.open(archivo_estampa)
-        st.image(
-            imagen_original,
-            caption="Imagen original",
-            width=500
-        )
+    if archivo_estampa:
+        img_original = Image.open(archivo_estampa)
+        st.image(img_original, caption="Imagen original", width=500)
 
-        # Opciones de configuración de la estampilla
-        st.markdown("### ⚙️ Configura tu estampilla")
-        texto_estampa = st.text_input("Texto que quieres agregar:", value="© Mi Marca Personal")
-        posicion = st.selectbox(
-            "Posición en la imagen:",
-            ["Abajo derecha", "Abajo izquierda", "Arriba derecha", "Arriba izquierda", "Centrado"]
-        )
-        tamaño_texto = st.slider("Tamaño del texto:", min_value=10, max_value=80, value=32)
-        transparencia = st.slider("Transparencia:", min_value=20, max_value=255, value=110)
+        texto = st.text_input("Texto:", value="© Mi Marca")
+        pos = st.selectbox("Posición:", ["Abajo derecha", "Abajo izquierda", "Arriba derecha", "Arriba izquierda", "Centrado"])
+        tam = st.slider("Tamaño:", 10, 80, 30)
+        opac = st.slider("Transparencia:", 20, 255, 100)
 
-        if st.button("✨ Aplicar estampilla", key="boton_aplicar_estampa"):
-            with st.spinner("Añadiendo la estampilla..."):
-                imagen_con_estampa = generar_estampilla(
-                    imagen_original,
-                    texto_estampa,
-                    posicion,
-                    tamaño_texto,
-                    transparencia
-                )
-                st.success("✅ Estampilla agregada correctamente!")
-                st.image(
-                    imagen_con_estampa,
-                    caption="Imagen con tu estampilla",
-                    width=500
-                )
+        if st.button("✨ Aplicar estampilla", key="boton2"):
+            with st.spinner("Aplicando..."):
+                img_final = generar_estampilla(img_original, texto, pos, tam, opac)
+                st.success("✅ Hecho!")
+                st.image(img_final, caption="Imagen final", width=500)
 
-                # Opción para descargar la imagen lista
-                buffer_descarga = io.BytesIO()
-                imagen_con_estampa.save(buffer_descarga, format="JPEG", quality=92)
+                buffer = io.BytesIO()
+                img_final.save(buffer, format="JPEG", quality=90)
                 st.download_button(
-                    label="💾 Descargar imagen final",
-                    data=buffer_descarga.getvalue(),
-                    file_name="imagen_con_estampilla.jpg",
+                    label="💾 Descargar",
+                    data=buffer.getvalue(),
+                    file_name="imagen_final.jpg",
                     mime="image/jpeg"
                 )
 
-# ---------------------- INFORMACIÓN ADICIONAL ----------------------
-with st.expander("ℹ️ Ver modelos disponibles de Gemini"):
-    if st.button("Cargar lista de modelos"):
+# Ver modelos
+with st.expander("ℹ️ Modelos disponibles"):
+    if st.button("Cargar modelos"):
         try:
-            for modelo_disponible in genai.list_models():
-                if "generateContent" in modelo_disponible.supported_generation_methods:
-                    st.write(f"- {modelo_disponible.name}")
-        except Exception as error:
-            st.error(f"No se pudo cargar la lista: {str(error)}")
+            for m in genai.list_models():
+                if "generateContent" in m.supported_generation_methods:
+                    st.write(f"- {m.name}")
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
