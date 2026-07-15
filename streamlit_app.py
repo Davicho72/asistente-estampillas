@@ -1,60 +1,71 @@
 import streamlit as st
-import google.generativeai as genai
+from dashscope import MultiModalConversation
 from PIL import Image
 import io
 import os
 import pandas as pd
+import time
 
 # ---------------------- CONFIGURACIÓN ----------------------
 st.set_page_config(
-    page_title="Asistente de Estampillas + Búsqueda Web",
-    page_icon="🌐",
+    page_title="Asistente de Estampillas - Qwen",
+    page_icon="📮",
     layout="wide"
 )
 
 # Lectura segura de tu variable en Render
-API_KEY = os.getenv("GOOGLE_API_KEY")
+API_KEY = os.getenv("DASHSCOPE_API_KEY")
 if not API_KEY:
     try:
-        API_KEY = st.secrets.get("GOOGLE_API_KEY")
+        API_KEY = st.secrets.get("DASHSCOPE_API_KEY")
     except:
         API_KEY = None
 
 if not API_KEY:
-    st.error("⚠️ Falta configurar GOOGLE_API_KEY en Render.")
+    st.error("⚠️ Falta configurar DASHSCOPE_API_KEY en Render.")
     st.stop()
-
-genai.configure(api_key=API_KEY)
-
-# ✅ Habilitamos la búsqueda web en el modelo
-modelo = genai.GenerativeModel(
-    "gemini-3.5-flash",
-    generation_config={"temperature": 0.3},
-    tools="google_search_retrieval"  # Activa la búsqueda en internet automática
-)
 
 # ---------------------- FUNCIÓN ANALIZAR ESTAMPILLA ----------------------
 def analizar_estampilla(imagen):
     try:
         img_byte_arr = io.BytesIO()
         imagen.save(img_byte_arr, format=imagen.format or "JPEG")
-        contenido = [
-            "Analiza esta estampilla postal. Primero describe lo que ves, luego usa la búsqueda en internet para confirmar datos exactos, valor de mercado y rareza. Devuelve SOLO los datos en este formato:",
-            "País: ", "Año exacto o aproximado: ", "Valor facial original: ", "Valor de mercado actual: ", "Temática: ", "Estado de conservación: ", "Rareza (común/poco común/rara/muy rara): ", "Color principal: ",
-            {"mime_type": f"image/{(imagen.format or 'jpeg').lower()}", "data": img_byte_arr.getvalue()}
-        ]
-        respuesta = modelo.generate_content(contenido)
-        respuesta.resolve()
-        texto = respuesta.text
+        contenido_imagen = img_byte_arr.getvalue()
 
+        mensajes = [
+            {
+                "role": "user",
+                "content": [
+                    {"text": "Analiza esta estampilla postal y devuelve SOLO los datos en este formato exacto, sin explicaciones extra:"},
+                    {"text": "País: "},
+                    {"text": "Año: "},
+                    {"text": "Valor Facial: "},
+                    {"text": "Temática: "},
+                    {"text": "Estado de conservación: "},
+                    {"text": "Color Principal: "},
+                    {"image": contenido_imagen}
+                ]
+            }
+        ]
+
+        respuesta = MultiModalConversation.call(
+            model="qwen2.5-vl-7b-instruct",
+            messages=mensajes,
+            api_key=API_KEY
+        )
+
+        if respuesta.get("status_code") != 200:
+            return {"Error": f"Fallo: {respuesta.get('message', 'Error desconocido')}"}
+
+        texto = respuesta["output"]["choices"][0]["message"]["content"][0]["text"]
+
+        # Extracción ordenada para la tabla
         datos = {
             "País": "No detectado",
             "Año": "No detectado",
             "Valor Facial": "No detectado",
-            "Valor Mercado": "Consulta en chat",
             "Temática": "No detectado",
             "Estado": "No detectado",
-            "Rareza": "No detectado",
             "Color Principal": "No detectado"
         }
 
@@ -63,22 +74,40 @@ def analizar_estampilla(imagen):
                 datos["País"] = linea.split(":", 1)[-1].strip()
             elif "Año" in linea:
                 datos["Año"] = linea.split(":", 1)[-1].strip()
-            elif "Valor facial" in linea:
+            elif "Valor Facial" in linea:
                 datos["Valor Facial"] = linea.split(":", 1)[-1].strip()
-            elif "Valor de mercado" in linea:
-                datos["Valor Mercado"] = linea.split(":", 1)[-1].strip()
             elif "Temática" in linea or "Tema" in linea:
                 datos["Temática"] = linea.split(":", 1)[-1].strip()
             elif "Estado" in linea:
                 datos["Estado"] = linea.split(":", 1)[-1].strip()
-            elif "Rareza" in linea:
-                datos["Rareza"] = linea.split(":", 1)[-1].strip()
             elif "Color" in linea:
                 datos["Color Principal"] = linea.split(":", 1)[-1].strip()
 
         return datos
     except Exception as e:
         return {"Error": f"Fallo al analizar: {str(e)}"}
+
+# ---------------------- FUNCIÓN CHAT ----------------------
+def responder_chat(mensaje, catalogo):
+    try:
+        contexto = f"""Eres un experto en estampillas postales y coleccionismo.
+        Mi catálogo actual es: {catalogo if catalogo else 'Aún no he agregado estampillas al catálogo.'}
+        Responde de forma clara, sencilla y breve, en español correcto.
+        Pregunta: {mensaje}"""
+
+        mensajes = [{"role": "user", "content": [{"text": contexto}]}]
+        respuesta = MultiModalConversation.call(
+            model="qwen-turbo",
+            messages=mensajes,
+            api_key=API_KEY
+        )
+
+        if respuesta.get("status_code") != 200:
+            return f"Error: {respuesta.get('message', 'No se pudo obtener respuesta')}"
+
+        return respuesta["output"]["choices"][0]["message"]["content"][0]["text"]
+    except Exception as e:
+        return f"Error: {str(e)}"
 
 # ---------------------- INICIO DE DATOS ----------------------
 if "catalogo" not in st.session_state:
@@ -88,13 +117,13 @@ if "historial_chat" not in st.session_state:
 
 # ---------------------- PESTAÑAS ----------------------
 pestaña1, pestaña2 = st.tabs([
-    "📇 Catálogo con datos de Internet",
-    "💬 Chat (Consulta tu colección + Busca en Web)"
+    "📇 Catálogo y Análisis",
+    "💬 Chat con Asistente"
 ])
 
 # ---------------------- PESTAÑA 1: CATÁLOGO ----------------------
 with pestaña1:
-    st.subheader("Sube tus estampillas: se analizan y se busca información en internet automáticamente")
+    st.subheader("Sube tus estampillas para analizarlas")
     archivos = st.file_uploader(
         "Selecciona una o varias imágenes",
         type=["jpg", "jpeg", "png", "webp"],
@@ -105,20 +134,21 @@ with pestaña1:
     if archivos:
         progreso = st.progress(0)
         for i, archivo in enumerate(archivos):
-            st.info(f"Analizando y buscando datos de estampilla {i+1}...")
+            st.info(f"Analizando estampilla {i+1} de {len(archivos)}...")
             img = Image.open(archivo)
             st.image(img, width=280, caption=f"Estampilla {i+1}")
 
             datos_estampa = analizar_estampilla(img)
             st.session_state.catalogo.append(datos_estampa)
             progreso.progress((i+1)/len(archivos))
+            time.sleep(0.5)  # Pausa para respetar límites
 
-        st.success("✅ Análisis completado: se combinó tu imagen con datos de internet!")
+        st.success("✅ Todas las estampillas guardadas en la tabla!")
 
     st.subheader("📋 Tabla ordenada de tu colección")
     if st.session_state.catalogo:
         df = pd.DataFrame(st.session_state.catalogo)
-        columnas_orden = ["País", "Año", "Valor Facial", "Valor Mercado", "Temática", "Estado", "Rareza", "Color Principal"]
+        columnas_orden = ["País", "Año", "Valor Facial", "Temática", "Estado", "Color Principal"]
         df = df.reindex(columns=columnas_orden)
 
         st.dataframe(df, use_container_width=True, hide_index=True)
@@ -127,7 +157,7 @@ with pestaña1:
         st.download_button(
             label="💾 Descargar catálogo en CSV",
             data=csv,
-            file_name="catalogo_estampillas_completo.csv",
+            file_name="catalogo_estampillas.csv",
             mime="text/csv"
         )
 
@@ -137,24 +167,16 @@ with pestaña1:
     else:
         st.info("Aún no hay estampillas guardadas. Sube tus imágenes para empezar.")
 
-# ---------------------- PESTAÑA 2: CHAT CON BÚSQUEDA ----------------------
+# ---------------------- PESTAÑA 2: CHAT ----------------------
 with pestaña2:
-    st.subheader("Consulta tu colección y busca cualquier dato en internet")
-    st.markdown("✅ **Busca en tu catálogo**: datos de tus estampillas guardadas\n✅ **Busca en internet**: precios, catálogos, historia, rareza, noticias\n✅ Respuesta escrita y hablada")
+    st.subheader("Consulta tus estampillas y pregunta cualquier cosa")
+    st.markdown("✅ El asistente conoce tu catálogo y responde tus dudas\n✅ Respuesta escrita y hablada")
 
-    pregunta = st.chat_input("Escribe tu pregunta: ej. ¿Cuánto vale esta estampilla? / ¿Dónde venderla? / Historia de las estampillas de España...")
+    pregunta = st.chat_input("Escribe tu pregunta...")
 
     if pregunta:
         st.session_state.historial_chat.append({"rol": "usuario", "texto": pregunta})
-
-        # Contexto que combina tu catálogo + permiso de búsqueda web
-        contexto = f"""Eres experto en filatelia.
-        1. Primero revisa mi catálogo: {st.session_state.catalogo if st.session_state.catalogo else 'No tengo estampillas guardadas aún.'}
-        2. Usa la búsqueda en internet para complementar, confirmar y ampliar la información: precios actuales, catálogos oficiales, datos históricos, valor de mercado, rareza, etc.
-        3. Responde claro, breve y en español. Si usas datos de internet, menciona brevemente la fuente.
-        Pregunta: {pregunta}"""
-
-        respuesta = modelo.generate_content(contexto).text
+        respuesta = responder_chat(pregunta, st.session_state.catalogo)
         st.session_state.historial_chat.append({"rol": "asistente", "texto": respuesta})
 
     for msg in st.session_state.historial_chat:
