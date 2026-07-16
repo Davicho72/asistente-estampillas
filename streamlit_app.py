@@ -36,7 +36,7 @@ def analizar_estampilla(imagen):
         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.2-90b-vision-instruct",
+            model="llama-3.2-11b-vision-instruct",  # ✅ Modelo de visión válido
             messages=[
                 {
                     "role": "user",
@@ -88,7 +88,7 @@ def responder_chat(mensaje, catalogo):
         Pregunta: {mensaje}"""
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.2-70b-instruct",
+            model="llama-3.1-8b-instruct",  # ✅ Modelo de chat válido y rápido
             messages=[{"role": "user", "content": contexto}],
             temperature=0.3,
             max_tokens=1024
