@@ -45,7 +45,8 @@ def analizar_imagen_completa(imagen):
         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
         respuesta = cliente.chat.completions.create(
-            model="llama-4-scout-17b-16e-instruct",  # ✅ Modelo de visión ACTIVO
+            # ✅ Modelo de visión CONFIRMADO en Groq hoy
+            model="llama-3.2-90b-vision-preview",
             messages=[
                 {
                     "role": "user",
@@ -130,7 +131,8 @@ Responde claro, breve y en español correcto.
 Pregunta: {mensaje}"""
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.1-8b-instant",  # ✅ Modelo de chat ACTIVO
+            # ✅ Modelo de chat CONFIRMADO y estable
+            model="llama-3.3-70b-instruct",
             messages=[{"role": "user", "content": contexto}],
             temperature=0.3,
             max_tokens=1024
