@@ -36,7 +36,7 @@ def analizar_estampilla(imagen):
         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.2-11b-vision-preview",  # ✅ Nombre correcto en Groq
+            model="llama-3.2-11b-vision-preview",  # ✅ Modelo oficial de visión
             messages=[
                 {
                     "role": "user",
@@ -88,7 +88,7 @@ def responder_chat(mensaje, catalogo):
         Pregunta: {mensaje}"""
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.1-8b-instruct-preview",  # ✅ Nombre correcto en Groq
+            model="llama3-8b-8192",  # ✅ Modelo de chat confirmado y gratuito
             messages=[{"role": "user", "content": contexto}],
             temperature=0.3,
             max_tokens=1024
@@ -176,7 +176,7 @@ with pestaña2:
             texto_seguro = msg["texto"].replace("'", "\\'").replace('"', '\\"')
             st.markdown(f"""
             <button onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('{texto_seguro}'))"
-            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:6px; cursor:pointer; font-size:13px; margin:5px 0;">
+            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:5px; cursor:pointer; font-size:13px; margin:5px 0;">
             🔊 Escuchar respuesta
             </button>
             """, unsafe_allow_html=True)
