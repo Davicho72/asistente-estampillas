@@ -28,72 +28,113 @@ if not API_KEY:
 
 cliente = Groq(api_key=API_KEY)
 
-# ---------------------- FUNCIÓN ANALIZAR ESTAMPILLA ----------------------
-def analizar_estampilla(imagen):
+# ---------------------- FUNCIÓN: IMAGEN A MINIATURA PARA TABLA ----------------------
+def imagen_a_html(img, ancho=100):
+    buf = io.BytesIO()
+    imagen_redimensionada = img.copy()
+    imagen_redimensionada.thumbnail((ancho, ancho))
+    imagen_redimensionada.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return f'<img src="data:image/png;base64,{b64}" width="{ancho}">'
+
+# ---------------------- FUNCIÓN: ANALIZAR TODAS LAS ESTAMPILLAS DE UNA FOTO ----------------------
+def analizar_imagen_completa(imagen):
     try:
         img_byte_arr = io.BytesIO()
         imagen.save(img_byte_arr, format=imagen.format or "JPEG")
         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
         respuesta = cliente.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",  # ✅ Recomendado para visión
+            model="llama-3.2-11b-vision-preview",
             messages=[
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Analiza esta estampilla postal y devuelve SOLO los datos en este formato exacto, sin explicaciones extra:\nPaís: \nAño: \nValor Facial: \nTemática: \nEstado de conservación: \nColor Principal:"},
+                        {"type": "text", "text": """
+Analiza esta imagen: puede tener UNA o VARIAS estampillas postales.
+Detecta CADA estampilla por separado. Para cada una, devuelve SOLO este formato exacto, sin texto extra:
+
+--- ESTAMPILLA ---
+País:
+Año aproximado:
+Valor facial original:
+Precio estimado de mercado (en euros):
+Temática / diseño:
+Estado de conservación:
+Color principal:
+--- FIN ---
+
+Si hay varias, repite el bloque para cada una. Si solo hay una, pon un solo bloque.
+"""},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_base64}"}}
                     ]
                 }
             ],
-            temperature=0.2,
-            max_tokens=1024
+            temperature=0.1,
+            max_tokens=2048
         )
 
         texto = respuesta.choices[0].message.content
+        lista_estampillas = []
+        bloque_actual = {}
 
-        datos = {
-            "País": "No detectado",
-            "Año": "No detectado",
-            "Valor Facial": "No detectado",
-            "Temática": "No detectado",
-            "Estado": "No detectado",
-            "Color Principal": "No detectado"
-        }
-
+        # Extraer cada bloque de datos
         for linea in texto.split("\n"):
-            if "País" in linea:
-                datos["País"] = linea.split(":", 1)[-1].strip()
+            linea = linea.strip()
+            if "--- ESTAMPILLA ---" in linea:
+                bloque_actual = {}
+            elif "--- FIN ---" in linea:
+                if bloque_actual:
+                    bloque_actual["Foto"] = imagen_a_html(imagen)
+                    lista_estampillas.append(bloque_actual)
+            elif "País:" in linea:
+                bloque_actual["País"] = linea.split(":", 1)[-1].strip() or "No detectado"
             elif "Año" in linea:
-                datos["Año"] = linea.split(":", 1)[-1].strip()
-            elif "Valor Facial" in linea:
-                datos["Valor Facial"] = linea.split(":", 1)[-1].strip()
-            elif "Temática" in linea or "Tema" in linea:
-                datos["Temática"] = linea.split(":", 1)[-1].strip()
+                bloque_actual["Año"] = linea.split(":", 1)[-1].strip() or "No detectado"
+            elif "Valor facial" in linea:
+                bloque_actual["Valor Facial"] = linea.split(":", 1)[-1].strip() or "No detectado"
+            elif "Precio estimado" in linea:
+                bloque_actual["Precio Estimado (€)"] = linea.split(":", 1)[-1].strip() or "No disponible"
+            elif "Temática" in linea or "diseño" in linea:
+                bloque_actual["Temática"] = linea.split(":", 1)[-1].strip() or "No detectado"
             elif "Estado" in linea:
-                datos["Estado"] = linea.split(":", 1)[-1].strip()
-            elif "Color" in linea:
-                datos["Color Principal"] = linea.split(":", 1)[-1].strip()
+                bloque_actual["Estado"] = linea.split(":", 1)[-1].strip() or "No detectado"
+            elif "Color principal" in linea:
+                bloque_actual["Color Principal"] = linea.split(":", 1)[-1].strip() or "No detectado"
 
-        return datos
+        # Si no se detectó el formato, guardar como una sola estampilla
+        if not lista_estampillas:
+            lista_estampillas.append({
+                "Foto": imagen_a_html(imagen),
+                "País": "No detectado",
+                "Año": "No detectado",
+                "Valor Facial": "No detectado",
+                "Precio Estimado (€)": "No disponible",
+                "Temática": "No detectado",
+                "Estado": "No detectado",
+                "Color Principal": "No detectado"
+            })
+
+        return lista_estampillas
+
     except Exception as e:
-        return {"Error": f"Fallo al analizar: {str(e)}"}
+        st.error(f"Fallo al analizar: {str(e)}")
+        return []
 
 # ---------------------- FUNCIÓN CHAT ----------------------
 def responder_chat(mensaje, catalogo):
     try:
         contexto = f"""Eres un experto en estampillas postales y coleccionismo.
-        Mi catálogo actual es: {catalogo if catalogo else 'Aún no he agregado estampillas al catálogo.'}
-        Responde de forma clara, sencilla y breve, en español correcto.
-        Pregunta: {mensaje}"""
+Mi catálogo actual: {catalogo if catalogo else 'Vacío'}
+Responde claro, breve y en español correcto.
+Pregunta: {mensaje}"""
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.1-8b-instant",  # ✅ Reemplazo oficial y disponible
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": contexto}],
             temperature=0.3,
             max_tokens=1024
         )
-
         return respuesta.choices[0].message.content
     except Exception as e:
         return f"Error: {str(e)}"
@@ -106,15 +147,15 @@ if "historial_chat" not in st.session_state:
 
 # ---------------------- PESTAÑAS ----------------------
 pestaña1, pestaña2 = st.tabs([
-    "📇 Catálogo y Análisis",
+    "📇 Catálogo con Fotos y Precios",
     "💬 Chat con Asistente"
 ])
 
 # ---------------------- PESTAÑA 1: CATÁLOGO ----------------------
 with pestaña1:
-    st.subheader("Sube tus estampillas para analizarlas")
+    st.subheader("Sube tus fotos: se analiza cada estampilla por separado")
     archivos = st.file_uploader(
-        "Selecciona una o varias imágenes",
+        "Puedes subir fotos con una o varias estampillas",
         type=["jpg", "jpeg", "png", "webp"],
         accept_multiple_files=True,
         key="subir_estampillas"
@@ -123,26 +164,30 @@ with pestaña1:
     if archivos:
         progreso = st.progress(0)
         for i, archivo in enumerate(archivos):
-            st.info(f"Analizando estampilla {i+1} de {len(archivos)}...")
+            st.info(f"Procesando imagen {i+1} de {len(archivos)}...")
             img = Image.open(archivo)
-            st.image(img, width=280, caption=f"Estampilla {i+1}")
+            st.image(img, width=350, caption="Imagen cargada")
 
-            datos_estampa = analizar_estampilla(img)
-            st.session_state.catalogo.append(datos_estampa)
+            nuevas = analizar_imagen_completa(img)
+            for estampa in nuevas:
+                st.session_state.catalogo.append(estampa)
+
             progreso.progress((i+1)/len(archivos))
-            time.sleep(0.3)
+            time.sleep(0.5)
 
-        st.success("✅ Todas las estampillas guardadas en la tabla!")
+        st.success(f"✅ Se agregaron {len(nuevas)} estampillas nuevas!")
 
-    st.subheader("📋 Tabla ordenada de tu colección")
+    st.subheader("📋 Tabla completa")
     if st.session_state.catalogo:
+        columnas = ["Foto", "País", "Año", "Valor Facial", "Precio Estimado (€)", "Temática", "Estado", "Color Principal"]
         df = pd.DataFrame(st.session_state.catalogo)
-        columnas_orden = ["País", "Año", "Valor Facial", "Temática", "Estado", "Color Principal"]
-        df = df.reindex(columns=columnas_orden)
+        df = df.reindex(columns=columnas)
 
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        # Mostrar tabla con imágenes
+        st.markdown(df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-        csv = df.to_csv(index=False, encoding="utf-8-sig")
+        # Descargar CSV (sin imágenes para que sea compatible)
+        csv = df.drop(columns=["Foto"]).to_csv(index=False, encoding="utf-8-sig")
         st.download_button(
             label="💾 Descargar catálogo en CSV",
             data=csv,
@@ -150,16 +195,16 @@ with pestaña1:
             mime="text/csv"
         )
 
-        if st.button("🗑️ Limpiar catálogo completo"):
+        if st.button("🗑️ Limpiar todo el catálogo"):
             st.session_state.catalogo = []
             st.rerun()
     else:
-        st.info("Aún no hay estampillas guardadas. Sube tus imágenes para empezar.")
+        st.info("Aún no hay estampillas. Sube tus fotos para empezar.")
 
 # ---------------------- PESTAÑA 2: CHAT ----------------------
 with pestaña2:
-    st.subheader("Consulta tus estampillas y pregunta cualquier cosa")
-    st.markdown("✅ El asistente conoce tu catálogo y responde tus dudas\n✅ Respuesta escrita y hablada")
+    st.subheader("Consulta tu colección")
+    st.markdown("✅ Conoce todas tus estampillas\n✅ Respuesta escrita y hablada")
 
     pregunta = st.chat_input("Escribe tu pregunta...")
 
@@ -173,14 +218,14 @@ with pestaña2:
             st.chat_message("👤 Tú").write(msg["texto"])
         else:
             st.chat_message("🤖 Asistente").write(msg["texto"])
-            texto_seguro = msg["texto"].replace("'", "\\'").replace('"', '\\"')
+            seguro = msg["texto"].replace("'", "\\'").replace('"', '\\"')
             st.markdown(f"""
-            <button onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('{texto_seguro}'))"
-            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:5px; cursor:pointer; font-size:13px; margin:5px 0;">
+            <button onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('{seguro}'))"
+            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:5px; cursor:pointer;">
             🔊 Escuchar respuesta
             </button>
             """, unsafe_allow_html=True)
 
-    if st.button("🗑️ Borrar historial del chat"):
+    if st.button("🗑️ Borrar chat"):
         st.session_state.historial_chat = []
         st.rerun()
