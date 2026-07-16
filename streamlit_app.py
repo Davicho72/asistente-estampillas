@@ -45,7 +45,7 @@ def analizar_imagen_completa(imagen):
         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.2-11b-vision-preview",
+            model="llama-4-scout-17b-16e-instruct",  # ✅ Modelo de visión ACTIVO
             messages=[
                 {
                     "role": "user",
@@ -130,7 +130,7 @@ Responde claro, breve y en español correcto.
 Pregunta: {mensaje}"""
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.1-8b-instant",  # ✅ Modelo de chat ACTIVO
             messages=[{"role": "user", "content": contexto}],
             temperature=0.3,
             max_tokens=1024
@@ -163,19 +163,21 @@ with pestaña1:
 
     if archivos:
         progreso = st.progress(0)
+        nuevas_totales = []
         for i, archivo in enumerate(archivos):
             st.info(f"Procesando imagen {i+1} de {len(archivos)}...")
             img = Image.open(archivo)
             st.image(img, width=350, caption="Imagen cargada")
 
             nuevas = analizar_imagen_completa(img)
+            nuevas_totales.extend(nuevas)
             for estampa in nuevas:
                 st.session_state.catalogo.append(estampa)
 
             progreso.progress((i+1)/len(archivos))
             time.sleep(0.5)
 
-        st.success(f"✅ Se agregaron {len(nuevas)} estampillas nuevas!")
+        st.success(f"✅ Se agregaron {len(nuevas_totales)} estampillas nuevas!")
 
     st.subheader("📋 Tabla completa")
     if st.session_state.catalogo:
@@ -221,7 +223,7 @@ with pestaña2:
             seguro = msg["texto"].replace("'", "\\'").replace('"', '\\"')
             st.markdown(f"""
             <button onclick="speechSynthesis.speak(new SpeechSynthesisUtterance('{seguro}'))"
-            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:5px; cursor:pointer;">
+            style="padding:6px 12px; background:#0068c9; color:white; border:none; border-radius:6px; cursor:pointer;">
             🔊 Escuchar respuesta
             </button>
             """, unsafe_allow_html=True)
