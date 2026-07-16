@@ -36,7 +36,7 @@ def analizar_estampilla(imagen):
         img_base64 = base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
 
         respuesta = cliente.chat.completions.create(
-            model="llama-3.2-11b-vision-preview",  # ✅ Modelo oficial de visión
+            model="meta-llama/llama-4-scout-17b-16e-instruct",  # ✅ Recomendado para visión
             messages=[
                 {
                     "role": "user",
@@ -88,7 +88,7 @@ def responder_chat(mensaje, catalogo):
         Pregunta: {mensaje}"""
 
         respuesta = cliente.chat.completions.create(
-            model="llama3-8b-8192",  # ✅ Modelo de chat confirmado y gratuito
+            model="llama-3.1-8b-instant",  # ✅ Reemplazo oficial y disponible
             messages=[{"role": "user", "content": contexto}],
             temperature=0.3,
             max_tokens=1024
