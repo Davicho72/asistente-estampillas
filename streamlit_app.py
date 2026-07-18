@@ -4,6 +4,7 @@ import base64
 from PIL import Image
 import io
 import os
+import json
 import pandas as pd
 from datetime import datetime
 
@@ -87,23 +88,26 @@ if archivos_subidos:
         with st.spinner("Analizando características..."):
             img_b64 = reducir_imagen(imagen)
             respuesta = client.chat.completions.create(
-                model="qwen/qwen3.6-27b-instruct",
+                model="qwen/qwen3.6-27b",  # ✅ Nombre de modelo corregido
                 messages=[{
                     "role": "user",
-                    "content": f"""Analiza esta estampilla y devuelve SOLO un JSON con estos datos:
-                    - pais: país de emisión
-                    - anio: año aproximado
-                    - valor_facial: valor facial
-                    - estado: estado de conservación
-                    - precio_venta: precio recomendado en USD
-                    - descripcion: detalles adicionales
-                    ![Imagen](data:image/jpeg;base64,{img_b64})"""
+                    "content": [
+                        {"type": "text", "text": """Analiza esta estampilla y devuelve SOLO un JSON válido sin texto adicional:
+                        {
+                            "pais": "país de emisión",
+                            "anio": "año aproximado",
+                            "valor_facial": "valor facial",
+                            "estado": "estado de conservación",
+                            "precio_venta": "precio recomendado en USD (solo número)",
+                            "descripcion": "detalles adicionales"
+                        }"""},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                    ]
                 }],
-                temperature=0.3,
-                response_format={"type": "json_object"}
+                temperature=0.3
+                # ✅ Se eliminó el parámetro incompatible response_format
             )
             
-            import json
             datos = json.loads(respuesta.choices[0].message.content)
             
             # Mostrar en tabla
@@ -174,7 +178,7 @@ modo_respuesta = st.radio("¿Cómo quieres la respuesta?", ["📄 Solo texto", "
 if st.button("Enviar consulta") and pregunta:
     with st.spinner("Procesando..."):
         respuesta = client.chat.completions.create(
-            model="qwen/qwen3.6-27b-instruct",
+            model="qwen/qwen3.6-27b",  # ✅ Mismo modelo corregido
             messages=[{
                 "role": "user",
                 "content": f"""Eres un asistente especializado en coleccionismo y venta internacional de estampillas.
@@ -201,7 +205,7 @@ if st.button("🔍 Generar propuesta de venta global"):
     with st.spinner("Buscando mercados y compradores..."):
         lista_estampas = df_estampillas[["pais", "anio", "valor_facial", "precio_venta"]].to_dict("records")
         propuesta = client.chat.completions.create(
-            model="qwen/qwen3.6-27b-instruct",
+            model="qwen/qwen3.6-27b",  # ✅ Mismo modelo corregido
             messages=[{
                 "role": "user",
                 "content": f"""Genera una propuesta comercial para ofrecer estas estampillas a coleccionistas y mercados mundiales:
