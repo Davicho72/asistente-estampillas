@@ -10,13 +10,31 @@ import pandas as pd
 from datetime import datetime
 
 # --------------------------
+# CONFIGURACIÓN PARA MÓVIL
+# --------------------------
+st.set_page_config(
+    page_title="Asistente Estampillas",
+    layout="wide",          # Se adapta a cualquier pantalla
+    initial_sidebar_state="auto", # Se oculta en móvil
+    menu_items=None
+)
+# Ajustes táctiles para botones y texto en móvil
+st.markdown("""
+<style>
+.stButton>button {min-height: 48px !important; font-size: 16px !important;}
+[data-testid="stFileUploader"] {font-size: 15px !important;}
+h1, h2, h3 {font-size: 18px !important;}
+</style>
+""", unsafe_allow_html=True)
+
+# --------------------------
 # CONFIGURACIÓN SEGURA
 # --------------------------
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ARCHIVO_DATOS = "estampillas_almacenadas.csv"
 
 # --------------------------
-# INICIALIZAR BASE DE DATOS
+# BASE DE DATOS
 # --------------------------
 def cargar_base_datos():
     if os.path.exists(ARCHIVO_DATOS):
@@ -30,23 +48,25 @@ def guardar_en_base_datos(df):
     df.to_csv(ARCHIVO_DATOS, index=False)
 
 # --------------------------
-# FUNCIONES DE PROCESAMIENTO
+# PROCESAMIENTO DE IMÁGENES
 # --------------------------
-def reducir_imagen(imagen_pil, max_ancho=600):
+def reducir_imagen(imagen_pil, max_ancho=500): # Más pequeño para móvil
     proporcion = max_ancho / imagen_pil.width
     alto_nuevo = int(imagen_pil.height * proporcion)
     img_pequena = imagen_pil.resize((max_ancho, alto_nuevo), Image.Resampling.LANCZOS)
     buffer = io.BytesIO()
-    img_pequena.save(buffer, format="JPEG", quality=85)
+    img_pequena.save(buffer, format="JPEG", quality=80)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 def extraer_json(texto):
-    """Solo extrae el bloque JSON aunque haya texto alrededor"""
     coincidencia = re.search(r'\{.*\}', texto, re.DOTALL)
     if coincidencia:
         return json.loads(coincidencia.group())
     raise ValueError("No se encontró JSON válido")
 
+# --------------------------
+# AUDIO: TRANSCRIPCIÓN SÍ, VOZ SIN REQUISITOS EXTRA
+# --------------------------
 def transcribir_a_texto(audio_bytes):
     with open("temp_audio.wav", "wb") as f:
         f.write(audio_bytes)
@@ -59,30 +79,21 @@ def transcribir_a_texto(audio_bytes):
     os.remove("temp_audio.wav")
     return transcripcion
 
-def texto_a_voz(texto):
-    respuesta = client.audio.speech.create(
-        model="canopylabs/orpheus-v1-english",
-        voice="diana",
-        input=texto
-    )
-    return respuesta.content
-
 # --------------------------
 # INTERFAZ PRINCIPAL
 # --------------------------
-st.set_page_config(page_title="Asistente de Estampillas", layout="wide")
-st.title("📮 Asistente Integral para Estampillas")
-
+st.title("📮 Asistente de Estampillas")
 df_estampillas = cargar_base_datos()
 
 # --------------------------
-# SECCIÓN 1: CARGAR Y CARACTERIZAR ESTAMPILLAS
+# CARGAR Y ANALIZAR
 # --------------------------
-st.header("📤 Cargar y analizar estampillas")
+st.header("📤 Cargar estampillas")
 archivos_subidos = st.file_uploader(
-    "Sube una o varias imágenes de estampillas",
+    "Sube una o varias imágenes",
     type=["jpg", "jpeg", "png"],
-    accept_multiple_files=True
+    accept_multiple_files=True,
+    label_visibility="visible"
 )
 
 if archivos_subidos:
@@ -90,23 +101,19 @@ if archivos_subidos:
     for idx, archivo in enumerate(archivos_subidos):
         st.subheader(f"Estampilla {idx+1}")
         imagen = Image.open(archivo)
-        st.image(imagen, width=350)
+        st.image(imagen, width=300) # Ajustado para móvil
         
-        with st.spinner("Analizando características..."):
+        with st.spinner("Analizando..."):
             img_b64 = reducir_imagen(imagen)
             respuesta = client.chat.completions.create(
                 model="qwen/qwen3.6-27b",
                 messages=[{
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": """Devuelve SOLO el objeto JSON, sin explicaciones ni texto antes o después:
+                        {"type": "text", "text": """Devuelve SOLO JSON sin texto extra:
                         {
-                            "pais": "país de emisión",
-                            "anio": "año aproximado",
-                            "valor_facial": "valor facial",
-                            "estado": "estado de conservación",
-                            "precio_venta": "precio recomendado en USD (solo número)",
-                            "descripcion": "detalles adicionales"
+                            "pais": "país", "anio": "año", "valor_facial": "valor",
+                            "estado": "conservación", "precio_venta": "número USD", "descripcion": "detalles"
                         }"""},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
                     ]
@@ -117,16 +124,14 @@ if archivos_subidos:
             try:
                 datos = extraer_json(respuesta.choices[0].message.content)
             except Exception as e:
-                st.error(f"No se pudo analizar esta estampilla: {str(e)}")
+                st.error(f"Error en esta estampilla: {str(e)}")
                 continue
             
-            st.write("📋 Características detectadas:")
             st.table(pd.DataFrame([datos]))
             
             nuevo_id = len(df_estampillas) + 1
             nuevos_registros.append({
-                "id": nuevo_id,
-                "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "id": nuevo_id, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "pais": datos.get("pais", "Desconocido"),
                 "anio": datos.get("anio", "Desconocido"),
                 "valor_facial": datos.get("valor_facial", "Desconocido"),
@@ -140,10 +145,10 @@ if archivos_subidos:
         df_nuevos = pd.DataFrame(nuevos_registros)
         df_estampillas = pd.concat([df_estampillas, df_nuevos], ignore_index=True)
         guardar_en_base_datos(df_estampillas)
-        st.success(f"✅ Se guardaron {len(nuevos_registros)} estampillas correctamente")
+        st.success(f"Guardadas {len(nuevos_registros)} estampillas")
 
 # --------------------------
-# SECCIÓN 2: VER TODAS LAS ESTAMPILLAS EN TABLA
+# CATÁLOGO
 # --------------------------
 st.header("📚 Catálogo guardado")
 if not df_estampillas.empty:
@@ -151,27 +156,24 @@ if not df_estampillas.empty:
     df_mostrar["Imagen"] = df_mostrar["imagen_b64"].apply(
         lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None
     )
-    columnas_mostrar = ["id", "fecha", "pais", "anio", "valor_facial", "estado", "precio_venta", "Imagen"]
     st.dataframe(
-        df_mostrar[columnas_mostrar],
-        column_config={
-            "Imagen": st.column_config.ImageColumn(width="medium"),
-            "precio_venta": st.column_config.NumberColumn("Precio USD")
-        },
-        use_container_width=True
+        df_mostrar[["id", "pais", "anio", "precio_venta", "Imagen"]],
+        column_config={"Imagen": st.column_config.ImageColumn(width="small")},
+        use_container_width=True,
+        hide_index=True
     )
 else:
-    st.info("Aún no hay estampillas guardadas.")
+    st.info("Aún no hay estampillas guardadas")
 
 # --------------------------
-# SECCIÓN 3: COMUNICACIÓN POR TEXTO Y VOZ
+# COMUNICACIÓN
 # --------------------------
-st.header("💬 Hablar con el asistente")
-modo_entrada = st.radio("¿Cómo quieres preguntar?", ["✍️ Texto", "🎤 Voz"])
+st.header("💬 Consultas")
+modo_entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
 
 pregunta = ""
 if modo_entrada == "✍️ Texto":
-    pregunta = st.text_area("Escribe tu consulta sobre estampillas, precios, venta...")
+    pregunta = st.text_area("Escribe tu consulta", height=100)
 else:
     audio = st.audio_input("Graba tu mensaje")
     if audio:
@@ -179,60 +181,35 @@ else:
             pregunta = transcribir_a_texto(audio.read())
             st.write(f"📝 Tu mensaje: {pregunta}")
 
-modo_respuesta = st.radio("¿Cómo quieres la respuesta?", ["📄 Solo texto", "🔊 Texto + voz"])
-
 if st.button("Enviar consulta") and pregunta:
     with st.spinner("Procesando..."):
         respuesta = client.chat.completions.create(
             model="qwen/qwen3.6-27b",
-            messages=[{
-                "role": "user",
-                "content": f"""Eres un asistente especializado en coleccionismo y venta internacional de estampillas.
-                Usa la información guardada en el catálogo si es necesario. Responde claro y completo.
-                Consulta: {pregunta}"""
-            }],
+            messages=[{"role": "user", "content": f"Asesoría sobre estampillas: {pregunta}"}],
             temperature=0.7
         )
-        texto_respuesta = respuesta.choices[0].message.content
-    
-    st.success("✅ Respuesta:")
-    st.write(texto_respuesta)
-    
-    if modo_respuesta == "🔊 Texto + voz":
-        with st.spinner("Generando audio..."):
-            audio_respuesta = texto_a_voz(texto_respuesta)
-            st.audio(audio_respuesta, format="audio/mp3")
+        st.success("✅ Respuesta:")
+        st.write(respuesta.choices[0].message.content)
 
 # --------------------------
-# SECCIÓN 4: BUSCAR COMPRADORES Y OFRECER
+# VENTA Y COMPRADORES
 # --------------------------
-st.header("🌍 Buscar compradores y ofrecer estampillas")
-if st.button("🔍 Generar propuesta de venta global"):
-    with st.spinner("Buscando mercados y compradores..."):
-        lista_estampas = df_estampillas[["pais", "anio", "valor_facial", "precio_venta"]].to_dict("records")
+st.header("🌍 Venta internacional")
+if st.button("Generar propuesta de venta"):
+    with st.spinner("Preparando..."):
+        lista = df_estampillas[["pais", "anio", "precio_venta"]].to_dict("records")
         propuesta = client.chat.completions.create(
             model="qwen/qwen3.6-27b",
-            messages=[{
-                "role": "user",
-                "content": f"""Genera una propuesta comercial para ofrecer estas estampillas a coleccionistas y mercados mundiales:
-                {lista_estampas}
-                
-                Incluye:
-                - Plataformas recomendadas (HipStamp, eBay, Delcampe, mercados locales)
-                - Perfiles de compradores más probables
-                - Consejos de envío internacional y precios
-                - Cómo contactar coleccionistas por país/región"""
-            }],
+            messages=[{"role": "user", "content": f"Propuesta de venta global: {lista}"}],
             temperature=0.6
         )
         st.markdown(propuesta.choices[0].message.content)
 
 # --------------------------
-# EXPORTAR DATOS
+# DESCARGAR
 # --------------------------
 st.download_button(
-    label="📥 Descargar catálogo completo (CSV)",
+    label="📥 Descargar CSV",
     data=df_estampillas.drop(columns=["imagen_b64"]).to_csv(index=False).encode("utf-8"),
-    file_name=f"catalogo_estampillas_{datetime.now().strftime('%Y%m%d')}.csv",
-    mime="text/csv"
+    file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv"
 )
