@@ -5,6 +5,7 @@ from PIL import Image
 import io
 import os
 import json
+import re
 import pandas as pd
 from datetime import datetime
 
@@ -39,6 +40,13 @@ def reducir_imagen(imagen_pil, max_ancho=600):
     img_pequena.save(buffer, format="JPEG", quality=85)
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
+def extraer_json(texto):
+    """Solo extrae el bloque JSON aunque haya texto alrededor"""
+    coincidencia = re.search(r'\{.*\}', texto, re.DOTALL)
+    if coincidencia:
+        return json.loads(coincidencia.group())
+    raise ValueError("No se encontró JSON válido")
+
 def transcribir_a_texto(audio_bytes):
     with open("temp_audio.wav", "wb") as f:
         f.write(audio_bytes)
@@ -65,7 +73,6 @@ def texto_a_voz(texto):
 st.set_page_config(page_title="Asistente de Estampillas", layout="wide")
 st.title("📮 Asistente Integral para Estampillas")
 
-# Cargar datos
 df_estampillas = cargar_base_datos()
 
 # --------------------------
@@ -88,11 +95,11 @@ if archivos_subidos:
         with st.spinner("Analizando características..."):
             img_b64 = reducir_imagen(imagen)
             respuesta = client.chat.completions.create(
-                model="qwen/qwen3.6-27b",  # ✅ Nombre de modelo corregido
+                model="qwen/qwen3.6-27b",
                 messages=[{
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": """Analiza esta estampilla y devuelve SOLO un JSON válido sin texto adicional:
+                        {"type": "text", "text": """Devuelve SOLO el objeto JSON, sin explicaciones ni texto antes o después:
                         {
                             "pais": "país de emisión",
                             "anio": "año aproximado",
@@ -104,31 +111,31 @@ if archivos_subidos:
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
                     ]
                 }],
-                temperature=0.3
-                # ✅ Se eliminó el parámetro incompatible response_format
+                temperature=0.1
             )
             
-            datos = json.loads(respuesta.choices[0].message.content)
+            try:
+                datos = extraer_json(respuesta.choices[0].message.content)
+            except Exception as e:
+                st.error(f"No se pudo analizar esta estampilla: {str(e)}")
+                continue
             
-            # Mostrar en tabla
             st.write("📋 Características detectadas:")
             st.table(pd.DataFrame([datos]))
             
-            # Agregar a base
             nuevo_id = len(df_estampillas) + 1
             nuevos_registros.append({
                 "id": nuevo_id,
                 "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "pais": datos["pais"],
-                "anio": datos["anio"],
-                "valor_facial": datos["valor_facial"],
-                "estado": datos["estado"],
-                "precio_venta": datos["precio_venta"],
-                "descripcion": datos["descripcion"],
+                "pais": datos.get("pais", "Desconocido"),
+                "anio": datos.get("anio", "Desconocido"),
+                "valor_facial": datos.get("valor_facial", "Desconocido"),
+                "estado": datos.get("estado", "Desconocido"),
+                "precio_venta": datos.get("precio_venta", 0),
+                "descripcion": datos.get("descripcion", "Sin detalles"),
                 "imagen_b64": img_b64
             })
     
-    # Guardar todo
     if nuevos_registros:
         df_nuevos = pd.DataFrame(nuevos_registros)
         df_estampillas = pd.concat([df_estampillas, df_nuevos], ignore_index=True)
@@ -140,7 +147,6 @@ if archivos_subidos:
 # --------------------------
 st.header("📚 Catálogo guardado")
 if not df_estampillas.empty:
-    # Preparar tabla con imágenes
     df_mostrar = df_estampillas.copy()
     df_mostrar["Imagen"] = df_mostrar["imagen_b64"].apply(
         lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None
@@ -178,7 +184,7 @@ modo_respuesta = st.radio("¿Cómo quieres la respuesta?", ["📄 Solo texto", "
 if st.button("Enviar consulta") and pregunta:
     with st.spinner("Procesando..."):
         respuesta = client.chat.completions.create(
-            model="qwen/qwen3.6-27b",  # ✅ Mismo modelo corregido
+            model="qwen/qwen3.6-27b",
             messages=[{
                 "role": "user",
                 "content": f"""Eres un asistente especializado en coleccionismo y venta internacional de estampillas.
@@ -205,7 +211,7 @@ if st.button("🔍 Generar propuesta de venta global"):
     with st.spinner("Buscando mercados y compradores..."):
         lista_estampas = df_estampillas[["pais", "anio", "valor_facial", "precio_venta"]].to_dict("records")
         propuesta = client.chat.completions.create(
-            model="qwen/qwen3.6-27b",  # ✅ Mismo modelo corregido
+            model="qwen/qwen3.6-27b",
             messages=[{
                 "role": "user",
                 "content": f"""Genera una propuesta comercial para ofrecer estas estampillas a coleccionistas y mercados mundiales:
