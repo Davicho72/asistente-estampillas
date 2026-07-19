@@ -15,15 +15,13 @@ from datetime import datetime
 st.set_page_config(
     page_title="Asistente Estampillas",
     layout="wide",
-    initial_sidebar_state="collapsed" # Menú oculto para más espacio
+    initial_sidebar_state="collapsed"
 )
 st.markdown("""
 <style>
 .stButton>button {min-height: 52px !important; font-size: 17px !important;}
 [data-testid="stFileUploader"] {font-size: 15px !important;}
 h1, h2, h3 {font-size: 19px !important;}
-/* Evita que la cámara se quede en pantalla */
-[data-testid="stCameraInput"] video {max-height: 350px !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -48,9 +46,19 @@ def guardar_en_base_datos(df):
     df.to_csv(ARCHIVO_DATOS, index=False)
 
 # --------------------------
-# PROCESAMIENTO DE IMÁGENES Y JSON
+# FUNCIÓN DE IMÁGENES: SOLUCIONA ERROR RGBA
 # --------------------------
 def reducir_imagen(imagen_pil, max_ancho=500):
+    # Convierte cualquier formato a RGB compatible con JPEG
+    if imagen_pil.mode in ("RGBA", "P"):
+        fondo_blanco = Image.new("RGB", imagen_pil.size, (255, 255, 255))
+        mascara = imagen_pil.split()[3] if imagen_pil.mode == "RGBA" else None
+        fondo_blanco.paste(imagen_pil, mask=mascara)
+        imagen_pil = fondo_blanco
+    elif imagen_pil.mode != "RGB":
+        imagen_pil = imagen_pil.convert("RGB")
+    
+    # Redimensionar
     proporcion = max_ancho / imagen_pil.width
     alto_nuevo = int(imagen_pil.height * proporcion)
     img_pequena = imagen_pil.resize((max_ancho, alto_nuevo), Image.Resampling.LANCZOS)
@@ -81,7 +89,7 @@ Devuelve SOLO un arreglo JSON SIN TEXTO ANTES O DESPUÉS:
     "estado": "conservación", "precio_venta": "número USD", "descripcion": "detalles"
   }
 ]
-Si hay una sola, usa un arreglo con un objeto.
+Si hay una sola, usa un arreglo con un solo objeto.
 """},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
             ]
@@ -108,49 +116,49 @@ def transcribir_a_texto(audio_bytes):
     return transcripcion
 
 # --------------------------
-# INTERFAZ PRINCIPAL
+# INICIO: CÁMARA TOTALMENTE CERRADA
 # --------------------------
 st.title("📮 Asistente de Estampillas")
 df_estampillas = cargar_base_datos()
 
-# --------------------------
-# CÁMARA QUE SE CIERRA AL TOMAR LA FOTO
-# --------------------------
+# Estados: al iniciar la cámara está DESACTIVADA
+if "activar_camara" not in st.session_state:
+    st.session_state.activar_camara = False
+
 st.header("📤 Cargar o tomar estampillas")
-
-# Variable para controlar la vista de cámara
-if "foto_tomada" not in st.session_state:
-    st.session_state.foto_tomada = False
-
-modo_carga = st.radio("Elige cómo subir:", ["📸 Tomar foto", "📂 Galería"])
+modo_carga = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
 
 archivos_procesar = []
 
-if modo_carga == "📸 Tomar foto":
-    if not st.session_state.foto_tomada:
-        st.info("ℹ️ Acepta permisos → toma la foto → se cerrará automáticamente")
-        foto = st.camera_input("Toma la estampilla", key="camara_cierre_auto")
-        if foto is not None:
-            st.session_state.foto_tomada = True
-            archivos_procesar.append(foto)
-    else:
-        st.success("✅ Foto capturada. Para tomar otra, pulsa abajo:")
-        if st.button("🔄 Tomar otra foto"):
-            st.session_state.foto_tomada = False
-            st.rerun() # Recarga y cierra la cámara
-
-else:
-    st.session_state.foto_tomada = False
+if modo_carga == "📂 Galería":
+    # Al cambiar a galería, se cierra la cámara automáticamente
+    st.session_state.activar_camara = False
     archivos_subidos = st.file_uploader(
-        "Selecciona imágenes",
+        "Selecciona imágenes de tu teléfono",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True
     )
     if archivos_subidos:
         archivos_procesar.extend(archivos_subidos)
 
+else:
+    # CÁMARA: SOLO SE MUESTRA SI TÚ LO ACTIVAS
+    if not st.session_state.activar_camara:
+        st.info("ℹ️ La cámara está cerrada. Pulsa abajo para abrirla:")
+        if st.button("📸 Abrir cámara"):
+            st.session_state.activar_camara = True
+            st.rerun()
+    else:
+        st.info("ℹ️ Toma la foto o pulsa para cerrar:")
+        foto = st.camera_input("Toma la estampilla", key="camara_controlada_final")
+        if foto:
+            archivos_procesar.append(foto)
+        if st.button("❌ Cerrar cámara"):
+            st.session_state.activar_camara = False
+            st.rerun()
+
 # --------------------------
-# PROCESAMIENTO DE IMÁGENES
+# PROCESAMIENTO
 # --------------------------
 if archivos_procesar:
     nuevos_registros = []
@@ -160,7 +168,7 @@ if archivos_procesar:
             imagen = Image.open(archivo)
             st.image(imagen, width=300)
             
-            with st.spinner("Analizando..."):
+            with st.spinner("Analizando cada estampilla..."):
                 img_b64 = reducir_imagen(imagen)
                 lista_estampas = analizar_varias_en_una(imagen, img_b64)
                 
@@ -195,7 +203,7 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)} estampillas")
 
 # --------------------------
-# RESTO DE FUNCIONES IGUALES
+# RESTO DE FUNCIONES
 # --------------------------
 st.header("📚 Catálogo guardado")
 if not df_estampillas.empty:
@@ -204,7 +212,7 @@ if not df_estampillas.empty:
         lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None
     )
     st.dataframe(
-        df_mostrar[["id", "pais", "anio", "precio_venta", "Imagen"]],
+        df_mostrar[["id", "fecha", "pais", "anio", "valor_facial", "estado", "precio_venta", "Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")},
         use_container_width=True,
         hide_index=True
