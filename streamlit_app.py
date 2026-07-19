@@ -10,7 +10,7 @@ import pandas as pd
 from datetime import datetime
 
 # --------------------------
-# CONFIGURACIÓN MÓVIL
+# CONFIGURACIÓN PARA MÓVIL
 # --------------------------
 st.set_page_config(
     page_title="Asistente Estampillas",
@@ -46,7 +46,7 @@ def guardar_en_base_datos(df):
     df.to_csv(ARCHIVO_DATOS, index=False)
 
 # --------------------------
-# PROCESAMIENTO DE IMÁGENES
+# PROCESAMIENTO DE IMÁGENES Y JSON
 # --------------------------
 def reducir_imagen(imagen_pil, max_ancho=500):
     proporcion = max_ancho / imagen_pil.width
@@ -57,37 +57,40 @@ def reducir_imagen(imagen_pil, max_ancho=500):
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 def extraer_json(texto):
-    coincidencia = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
+    # Limpieza total de texto extra antes de leer JSON
+    limpio = re.sub(r'^[^[{]*', '', texto)
+    limpio = re.sub(r'[}\]]*[^}\]]*$', '', limpio)
+    coincidencia = re.search(r'\[.*\]|\{.*\}', limpio, re.DOTALL)
     if coincidencia:
         return json.loads(coincidencia.group())
     raise ValueError("No se encontró JSON válido")
 
 def analizar_varias_en_una(imagen, img_b64):
-    """Analiza TODAS las estampillas que haya en la misma foto, cada una por separado"""
     respuesta = client.chat.completions.create(
         model="qwen/qwen3.6-27b",
         messages=[{
             "role": "user",
             "content": [
                 {"type": "text", "text": """
-En esta imagen puede haber UNA O VARIAS estampillas.
-Identifica CADA estampilla POR SEPARADO, sin omitir ninguna.
-Devuelve SOLO un arreglo JSON válido, sin texto antes ni después.
-Cada objeto dentro del arreglo debe tener exactamente estos campos:
-{
+Analiza TODAS las estampillas que haya en la imagen, una por una.
+Devuelve SOLO un arreglo JSON, SIN NINGÚN TEXTO ANTES O DESPUÉS.
+Formato obligatorio:
+[
+  {
     "pais": "país de emisión",
-    "anio": "año aproximado",
-    "valor_facial": "valor facial",
+    "anio": "año o período",
+    "valor_facial": "valor y moneda",
     "estado": "estado de conservación",
-    "precio_venta": "precio recomendado en USD (solo número)",
-    "descripcion": "detalles de diseño y colores"
-}
-Si solo hay una, devuelve un arreglo con un solo objeto.
+    "precio_venta": "número en USD",
+    "descripcion": "detalles del diseño"
+  }
+]
+Si solo hay una estampilla, usa un arreglo con un solo objeto.
 """},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
             ]
         }],
-        temperature=0.1
+        temperature=0.0
     )
     try:
         resultado = extraer_json(respuesta.choices[0].message.content)
@@ -117,7 +120,7 @@ st.title("📮 Asistente de Estampillas")
 df_estampillas = cargar_base_datos()
 
 # --------------------------
-# CARGAR O TOMAR FOTO
+# CARGAR O TOMAR FOTO (CÁMARA CORREGIDA)
 # --------------------------
 st.header("📤 Cargar o tomar estampillas")
 modo_carga = st.radio("Elige cómo subir:", ["📸 Tomar foto con cámara", "📂 Seleccionar de la galería"])
@@ -125,8 +128,10 @@ modo_carga = st.radio("Elige cómo subir:", ["📸 Tomar foto con cámara", "�
 archivos_procesar = []
 
 if modo_carga == "📸 Tomar foto con cámara":
-    foto = st.camera_input("Toma la foto (puedes poner varias estampillas juntas)")
-    if foto:
+    st.info("ℹ️ Permite el acceso a la cámara definitivamente. Toma la foto y espera unos segundos.")
+    foto = st.camera_input("Toma la foto de la estampilla", key="camara_estable")
+    if foto is not None:
+        st.success("✅ Foto capturada correctamente, procesando...")
         archivos_procesar.append(foto)
 else:
     archivos_subidos = st.file_uploader(
@@ -142,34 +147,38 @@ if archivos_procesar:
     nuevos_registros = []
     for idx, archivo in enumerate(archivos_procesar):
         st.subheader(f"📷 Imagen {idx+1}")
-        imagen = Image.open(archivo)
-        st.image(imagen, width=300)
-        
-        with st.spinner("Analizando cada estampilla por separado..."):
-            img_b64 = reducir_imagen(imagen)
-            lista_estampas = analizar_varias_en_una(imagen, img_b64)
+        try:
+            imagen = Image.open(archivo)
+            st.image(imagen, width=300)
             
-            if not lista_estampas:
-                st.warning("No se detectaron estampillas claras en esta imagen")
-                continue
-            
-            st.success(f"✅ Se detectaron {len(lista_estampas)} estampillas en esta foto:")
-            for num, datos in enumerate(lista_estampas, 1):
-                st.write(f"**Estampilla {num}:**")
-                st.table(pd.DataFrame([datos]))
+            with st.spinner("Analizando cada estampilla..."):
+                img_b64 = reducir_imagen(imagen)
+                lista_estampas = analizar_varias_en_una(imagen, img_b64)
                 
-                nuevo_id = len(df_estampillas) + len(nuevos_registros) + 1
-                nuevos_registros.append({
-                    "id": nuevo_id,
-                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "pais": datos.get("pais", "Desconocido"),
-                    "anio": datos.get("anio", "Desconocido"),
-                    "valor_facial": datos.get("valor_facial", "Desconocido"),
-                    "estado": datos.get("estado", "Desconocido"),
-                    "precio_venta": datos.get("precio_venta", 0),
-                    "descripcion": datos.get("descripcion", "Sin detalles"),
-                    "imagen_b64": img_b64
-                })
+                if not lista_estampas:
+                    st.warning("No se detectaron estampillas claras en esta imagen")
+                    continue
+                
+                st.success(f"✅ Se detectaron {len(lista_estampas)} estampillas:")
+                for num, datos in enumerate(lista_estampas, 1):
+                    st.write(f"**Estampilla {num}:**")
+                    st.table(pd.DataFrame([datos]))
+                    
+                    nuevo_id = len(df_estampillas) + len(nuevos_registros) + 1
+                    nuevos_registros.append({
+                        "id": nuevo_id,
+                        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "pais": datos.get("pais", "Desconocido"),
+                        "anio": datos.get("anio", "Desconocido"),
+                        "valor_facial": datos.get("valor_facial", "Desconocido"),
+                        "estado": datos.get("estado", "Desconocido"),
+                        "precio_venta": datos.get("precio_venta", 0),
+                        "descripcion": datos.get("descripcion", "Sin detalles"),
+                        "imagen_b64": img_b64
+                    })
+        except Exception as e:
+            st.error(f"❌ No se pudo leer la foto: {str(e)}")
+            st.info("Prueba con mejor iluminación o usa la galería")
     
     if nuevos_registros:
         df_nuevos = pd.DataFrame(nuevos_registros)
@@ -178,7 +187,7 @@ if archivos_procesar:
         st.success(f"📦 Guardadas en total: {len(nuevos_registros)} estampillas")
 
 # --------------------------
-# RESTO DE FUNCIONES IGUALES
+# CATÁLOGO GUARDADO
 # --------------------------
 st.header("📚 Catálogo guardado")
 if not df_estampillas.empty:
@@ -187,7 +196,7 @@ if not df_estampillas.empty:
         lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None
     )
     st.dataframe(
-        df_mostrar[["id", "pais", "anio", "valor_facial", "estado", "precio_venta", "Imagen"]],
+        df_mostrar[["id", "fecha", "pais", "anio", "valor_facial", "estado", "precio_venta", "Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")},
         use_container_width=True,
         hide_index=True
@@ -195,6 +204,9 @@ if not df_estampillas.empty:
 else:
     st.info("Aún no hay estampillas guardadas")
 
+# --------------------------
+# CONSULTAS POR TEXTO O VOZ
+# --------------------------
 st.header("💬 Consultas")
 modo_entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
 pregunta = ""
@@ -217,6 +229,9 @@ if st.button("Enviar consulta") and pregunta:
         st.success("✅ Respuesta:")
         st.write(respuesta.choices[0].message.content)
 
+# --------------------------
+# VENTA INTERNACIONAL
+# --------------------------
 st.header("🌍 Venta internacional")
 if st.button("Generar propuesta de venta"):
     with st.spinner("Preparando..."):
@@ -228,6 +243,9 @@ if st.button("Generar propuesta de venta"):
         )
         st.markdown(propuesta.choices[0].message.content)
 
+# --------------------------
+# DESCARGAR CATÁLOGO
+# --------------------------
 st.download_button(
     label="📥 Descargar CSV",
     data=df_estampillas.drop(columns=["imagen_b64"]).to_csv(index=False).encode("utf-8"),
