@@ -76,7 +76,7 @@ def extraer_json(texto):
     raise ValueError("Formato no válido")
 
 # --------------------------
-# ANÁLISIS: SOLO CAMBIO MONEDA A GBP, RESTO IGUAL
+# ANÁLISIS: SOLO MONEDA EN GBP, RESTO IGUAL
 # --------------------------
 def analizar_varias_en_una(imagen, img_b64):
     respuesta = client.chat.completions.create(
@@ -261,30 +261,30 @@ if st.button("Enviar consulta") and pregunta:
         st.write(respuesta.choices[0].message.content)
 
 # --------------------------
-# CAMBIO SOLICITADO: BUSCAR POSIBLES CLIENTES
+# POSIBLES COMPRADORES REALES: SIN INDICAR DÓNDE BUSCAR
 # --------------------------
-st.header("🌍 Buscar posibles clientes")
-if st.button("🔍 Buscar interesados en las estampillas"):
+st.header("🌍 Posibles compradores interesados")
+if st.button("🔍 Ver compradores para tus estampillas"):
     if df_estampillas.empty:
         st.warning("Primero carga y guarda al menos una estampilla")
     else:
-        with st.spinner("Buscando coleccionistas, tiendas y portales de venta en la red..."):
+        with st.spinner("Identificando compradores interesados..."):
             lista = df_estampillas[["pais", "anio", "estado", "precio_venta", "descripcion"]].to_dict("records")
             respuesta = client.chat.completions.create(
                 model="qwen/qwen3.6-27b",
                 messages=[{"role": "user", "content": f"""
-Para estas estampillas en libras esterlinas: {lista}
-Busca y lista posibles clientes y lugares donde venderlas en la red:
-- Foros y comunidades de filatelia
-- Tiendas especializadas
-- Plataformas de venta y subastas
-- Grupos de coleccionistas
-Indica por cada uno: nombre, enlace público y por qué podría interesarle.
-Sé práctico y usa fuentes reales y accesibles.
+Para estas estampillas valoradas en libras esterlinas: {lista}
+Identifica y lista **directamente los posibles compradores reales** interesados en adquirirlas.
+No menciones plataformas, enlaces ni lugares donde buscarlos. Solo indica quiénes son y por qué estarían interesados:
+- Coleccionistas especializados en el país, época o tema de estas piezas
+- Comerciantes y casas especializadas que compran este tipo de material
+- Entidades o fondos que adquieren piezas de estas características
+- Inversores en filatelia interesados en valores similares
+Explica brevemente qué buscan específicamente y por qué encajan con tu colección.
 """}],
-                temperature=0.5
+                temperature=0.4
             )
-            st.success("✅ Posibles clientes y lugares encontrados:")
+            st.success("✅ Posibles compradores identificados:")
             st.markdown(respuesta.choices[0].message.content)
 
 # --------------------------
