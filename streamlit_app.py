@@ -219,7 +219,7 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)} estampillas")
 
 # --------------------------
-# CATÁLOGO: AHORA SE VE SOLO AL PULSAR BOTÓN
+# CATÁLOGO: VER/OCULTAR (INTACTO)
 # --------------------------
 st.header("📚 Catálogo guardado")
 if st.button("📋 Ver / Ocultar catálogo"):
@@ -267,30 +267,33 @@ if st.button("Enviar consulta") and pregunta:
         st.write(respuesta.choices[0].message.content)
 
 # --------------------------
-# POSIBLES COMPRADORES (INTACTO)
+# BÚSQUEDA ESPECÍFICA DE COMPRADORES MUNDIALES
 # --------------------------
-st.header("🌍 Posibles compradores interesados")
-if st.button("🔍 Ver compradores para tus estampillas"):
+st.header("🌍 Posibles compradores específicos")
+if st.button("🔍 Obtener datos exactos de compradores"):
     if df_estampillas.empty:
         st.warning("Primero carga y guarda al menos una estampilla")
     else:
-        with st.spinner("Identificando compradores interesados..."):
+        with st.spinner("Buscando datos concretos de tiendas, casas y coleccionistas..."):
             lista = df_estampillas[["pais", "anio", "estado", "precio_venta", "descripcion"]].to_dict("records")
             respuesta = client.chat.completions.create(
                 model="qwen/qwen3.6-27b",
                 messages=[{"role": "user", "content": f"""
 Para estas estampillas valoradas en libras esterlinas: {lista}
-Identifica y lista **directamente los posibles compradores reales** interesados en adquirirlas.
-No menciones plataformas, enlaces ni lugares donde buscarlos. Solo indica quiénes son y por qué estarían interesados:
-- Coleccionistas especializados en el país, época o tema de estas piezas
-- Comerciantes y casas especializadas que compran este tipo de material
-- Entidades o fondos que adquieren piezas de estas características
-- Inversores en filatelia interesados en valores similares
-Explica brevemente qué buscan específicamente y por qué encajan con tu colección.
+Realiza una búsqueda MUNDIAL y entrega SOLAMENTE la información ESPECÍFICA y CONCRETA de cada comprador, tienda especializada o casa de subastas que las adquiriría.
+NO des frases generales como "tiendas especializadas" ni menciones dónde buscarlos.
+Para cada uno incluye EXACTAMENTE estos datos:
+- Nombre completo de la entidad o comprador
+- País y ciudad donde opera
+- Qué tipo de estampillas compra específicamente (coincidiendo con las tuyas)
+- Datos de contacto: correo electrónico oficial y teléfono
+- Página web oficial
+Explica brevemente por qué estarían interesados en tus piezas.
+No incluyas listas de plataformas, enlaces de búsqueda ni lugares donde encontrarlos. Solo los datos directos de cada comprador real.
 """}],
-                temperature=0.4
+                temperature=0.3
             )
-            st.success("✅ Posibles compradores identificados:")
+            st.success("✅ Datos específicos de compradores encontrados:")
             st.markdown(respuesta.choices[0].message.content)
 
 # --------------------------
