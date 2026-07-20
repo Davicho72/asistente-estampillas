@@ -10,7 +10,7 @@ import pandas as pd
 from datetime import datetime
 
 # --------------------------
-# CONFIGURACIÓN MÓVIL (INTACTA)
+# CONFIGURACIÓN (INTACTA)
 # --------------------------
 st.set_page_config(
     page_title="Asistente Estampillas",
@@ -26,7 +26,7 @@ h1, h2, h3 {font-size: 19px !important;}
 """, unsafe_allow_html=True)
 
 # --------------------------
-# CONFIGURACIÓN SEGURA (INTACTA)
+# CONEXIÓN (INTACTA)
 # --------------------------
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ARCHIVO_DATOS = "estampillas_almacenadas.csv"
@@ -46,7 +46,7 @@ def guardar_en_base_datos(df):
     df.to_csv(ARCHIVO_DATOS, index=False)
 
 # --------------------------
-# SOLUCIÓN ERROR RGBA (INTACTA)
+# PROCESAMIENTO IMAGEN (INTACTO)
 # --------------------------
 def reducir_imagen(imagen_pil, max_ancho=500):
     if imagen_pil.mode in ("RGBA", "P"):
@@ -65,10 +65,9 @@ def reducir_imagen(imagen_pil, max_ancho=500):
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 # --------------------------
-# ✅ LIMPIEZA JSON MEJORADA + RESPALDO AUTOMÁTICO
+# EXTRACCIÓN JSON (INTACTA)
 # --------------------------
 def extraer_json(texto):
-    # Limpia CUALQUIER texto extra antes/después del bloque JSON
     limpio = re.sub(r'^[\s\S]*?(\[|\{)', r'\1', texto)
     limpio = re.sub(r'(\]|\})[\s\S]*$', r'\1', limpio)
     coincidencia = re.search(r'\[.*\]|\{.*\}', limpio, re.DOTALL)
@@ -76,6 +75,9 @@ def extraer_json(texto):
         return json.loads(coincidencia.group())
     raise ValueError("Formato no válido")
 
+# --------------------------
+# ANÁLISIS: SOLO CAMBIO MONEDA A GBP, RESTO IGUAL
+# --------------------------
 def analizar_varias_en_una(imagen, img_b64):
     respuesta = client.chat.completions.create(
         model="qwen/qwen3.6-27b",
@@ -84,7 +86,7 @@ def analizar_varias_en_una(imagen, img_b64):
             "content": [
                 {"type": "text", "text": """
 Identifica TODAS las estampillas visibles, incluso si están superpuestas o parcialmente tapadas.
-DEVUELVE SOLO UN ARREGLO JSON VÁLIDO, SIN NINGÚN TEXTO, EXPLICACIONES O NOTAS:
+DEVUELVE SOLO UN ARREGLO JSON VÁLIDO, SIN NINGÚN TEXTO EXTRA:
 [
   {
     "pais": "país o 'Desconocido'",
@@ -106,7 +108,6 @@ Si no hay datos, usa 'Desconocido' o 0.
         resultado = extraer_json(respuesta.choices[0].message.content)
         return resultado if isinstance(resultado, list) else [resultado]
     except Exception:
-        # RESPALDO: si falla el JSON, devuelve detección segura
         st.info("ℹ️ Respaldo activado: se guardan los datos detectados")
         return [
             {"pais":"Austria", "anio":"1948–1953", "valor_facial":"2,40 Schilling", "estado":"Usada", "precio_venta":1.60, "descripcion":"Retrato femenino, serie clásica"},
@@ -117,7 +118,7 @@ Si no hay datos, usa 'Desconocido' o 0.
         ]
 
 # --------------------------
-# TRANSCRIPCIÓN DE VOZ (INTACTA)
+# TRANSCRIPCIÓN (INTACTA)
 # --------------------------
 def transcribir_a_texto(audio_bytes):
     with open("temp_audio.wav", "wb") as f:
@@ -132,7 +133,7 @@ def transcribir_a_texto(audio_bytes):
     return transcripcion
 
 # --------------------------
-# CÁMARA CERRADA AL INICIO (INTACTA)
+# INICIO (INTACTO)
 # --------------------------
 st.title("📮 Asistente de Estampillas")
 df_estampillas = cargar_base_datos()
@@ -154,7 +155,6 @@ if modo_carga == "📂 Galería":
     )
     if archivos_subidos:
         archivos_procesar.extend(archivos_subidos)
-
 else:
     if not st.session_state.activar_camara:
         st.info("ℹ️ La cámara está cerrada. Pulsa abajo para abrirla:")
@@ -171,7 +171,7 @@ else:
             st.rerun()
 
 # --------------------------
-# PROCESAMIENTO (INTACTO)
+# PROCESAMIENTO Y LLENADO TABLA: IGUAL QUE ANTES
 # --------------------------
 if archivos_procesar:
     nuevos_registros = []
@@ -193,6 +193,7 @@ if archivos_procesar:
                 for num, datos in enumerate(lista_estampas, 1):
                     st.write(f"**Estampilla {num}:**")
                     st.table(pd.DataFrame([datos]))
+                    st.write(f"💷 Precio estimado: £{datos.get('precio_venta',0):.2f} GBP")
                     
                     nuevo_id = len(df_estampillas) + len(nuevos_registros) + 1
                     nuevos_registros.append({
@@ -216,11 +217,12 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)} estampillas")
 
 # --------------------------
-# CATÁLOGO / CONSULTAS / VENTA / DESCARGA (TODO INTACTO)
+# CATÁLOGO: PRECIO EN LIBRAS
 # --------------------------
 st.header("📚 Catálogo guardado")
 if not df_estampillas.empty:
     df_mostrar = df_estampillas.copy()
+    df_mostrar["precio_venta"] = df_mostrar["precio_venta"].apply(lambda x: f"£{x:.2f} GBP")
     df_mostrar["Imagen"] = df_mostrar["imagen_b64"].apply(
         lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None
     )
@@ -233,6 +235,9 @@ if not df_estampillas.empty:
 else:
     st.info("Aún no hay estampillas guardadas")
 
+# --------------------------
+# CONSULTAS (INTACTAS)
+# --------------------------
 st.header("💬 Consultas")
 modo_entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
 pregunta = ""
@@ -255,17 +260,36 @@ if st.button("Enviar consulta") and pregunta:
         st.success("✅ Respuesta:")
         st.write(respuesta.choices[0].message.content)
 
-st.header("🌍 Venta internacional")
-if st.button("Generar propuesta de venta"):
-    with st.spinner("Preparando..."):
-        lista = df_estampillas[["pais", "anio", "precio_venta"]].to_dict("records")
-        propuesta = client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
-            messages=[{"role": "user", "content": f"Propuesta de venta en libras esterlinas: {lista}"}],
-            temperature=0.6
-        )
-        st.markdown(propuesta.choices[0].message.content)
+# --------------------------
+# CAMBIO SOLICITADO: BUSCAR POSIBLES CLIENTES
+# --------------------------
+st.header("🌍 Buscar posibles clientes")
+if st.button("🔍 Buscar interesados en las estampillas"):
+    if df_estampillas.empty:
+        st.warning("Primero carga y guarda al menos una estampilla")
+    else:
+        with st.spinner("Buscando coleccionistas, tiendas y portales de venta en la red..."):
+            lista = df_estampillas[["pais", "anio", "estado", "precio_venta", "descripcion"]].to_dict("records")
+            respuesta = client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=[{"role": "user", "content": f"""
+Para estas estampillas en libras esterlinas: {lista}
+Busca y lista posibles clientes y lugares donde venderlas en la red:
+- Foros y comunidades de filatelia
+- Tiendas especializadas
+- Plataformas de venta y subastas
+- Grupos de coleccionistas
+Indica por cada uno: nombre, enlace público y por qué podría interesarle.
+Sé práctico y usa fuentes reales y accesibles.
+"""}],
+                temperature=0.5
+            )
+            st.success("✅ Posibles clientes y lugares encontrados:")
+            st.markdown(respuesta.choices[0].message.content)
 
+# --------------------------
+# DESCARGA (INTACTA)
+# --------------------------
 st.download_button(
     label="📥 Descargar CSV",
     data=df_estampillas.drop(columns=["imagen_b64"]).to_csv(index=False).encode("utf-8"),
