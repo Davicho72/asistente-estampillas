@@ -76,7 +76,7 @@ def extraer_json(texto):
     raise ValueError("Formato no válido")
 
 # --------------------------
-# ANÁLISIS: SOLO MONEDA EN GBP, RESTO IGUAL
+# ANÁLISIS: MONEDA EN GBP, RESTO IGUAL
 # --------------------------
 def analizar_varias_en_una(imagen, img_b64):
     respuesta = client.chat.completions.create(
@@ -140,6 +140,8 @@ df_estampillas = cargar_base_datos()
 
 if "activar_camara" not in st.session_state:
     st.session_state.activar_camara = False
+if "ver_catalogo" not in st.session_state:
+    st.session_state.ver_catalogo = False
 
 st.header("📤 Cargar o tomar estampillas")
 modo_carga = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
@@ -217,23 +219,27 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)} estampillas")
 
 # --------------------------
-# CATÁLOGO: PRECIO EN LIBRAS
+# CATÁLOGO: AHORA SE VE SOLO AL PULSAR BOTÓN
 # --------------------------
 st.header("📚 Catálogo guardado")
-if not df_estampillas.empty:
-    df_mostrar = df_estampillas.copy()
-    df_mostrar["precio_venta"] = df_mostrar["precio_venta"].apply(lambda x: f"£{x:.2f} GBP")
-    df_mostrar["Imagen"] = df_mostrar["imagen_b64"].apply(
-        lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None
-    )
-    st.dataframe(
-        df_mostrar[["id", "fecha", "pais", "anio", "valor_facial", "estado", "precio_venta", "Imagen"]],
-        column_config={"Imagen": st.column_config.ImageColumn(width="small")},
-        use_container_width=True,
-        hide_index=True
-    )
-else:
-    st.info("Aún no hay estampillas guardadas")
+if st.button("📋 Ver / Ocultar catálogo"):
+    st.session_state.ver_catalogo = not st.session_state.ver_catalogo
+
+if st.session_state.ver_catalogo:
+    if not df_estampillas.empty:
+        df_mostrar = df_estampillas.copy()
+        df_mostrar["precio_venta"] = df_mostrar["precio_venta"].apply(lambda x: f"£{x:.2f} GBP")
+        df_mostrar["Imagen"] = df_mostrar["imagen_b64"].apply(
+            lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None
+        )
+        st.dataframe(
+            df_mostrar[["id", "fecha", "pais", "anio", "valor_facial", "estado", "precio_venta", "Imagen"]],
+            column_config={"Imagen": st.column_config.ImageColumn(width="small")},
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("Aún no hay estampillas guardadas")
 
 # --------------------------
 # CONSULTAS (INTACTAS)
@@ -261,7 +267,7 @@ if st.button("Enviar consulta") and pregunta:
         st.write(respuesta.choices[0].message.content)
 
 # --------------------------
-# POSIBLES COMPRADORES REALES: SIN INDICAR DÓNDE BUSCAR
+# POSIBLES COMPRADORES (INTACTO)
 # --------------------------
 st.header("🌍 Posibles compradores interesados")
 if st.button("🔍 Ver compradores para tus estampillas"):
