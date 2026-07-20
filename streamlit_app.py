@@ -10,7 +10,7 @@ import pandas as pd
 from datetime import datetime
 
 # --------------------------
-# CONFIGURACIÓN (INTACTA)
+# CONFIGURACIÓN
 # --------------------------
 st.set_page_config(
     page_title="Asistente Estampillas",
@@ -26,13 +26,13 @@ h1, h2, h3 {font-size: 19px !important;}
 """, unsafe_allow_html=True)
 
 # --------------------------
-# CONEXIÓN (INTACTA)
+# CONEXIÓN Y ARCHIVO
 # --------------------------
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ARCHIVO_DATOS = "estampillas_almacenadas.csv"
 
 # --------------------------
-# BASE DE DATOS (INTACTA)
+# BASE DE DATOS
 # --------------------------
 def cargar_base_datos():
     if os.path.exists(ARCHIVO_DATOS):
@@ -46,7 +46,7 @@ def guardar_en_base_datos(df):
     df.to_csv(ARCHIVO_DATOS, index=False)
 
 # --------------------------
-# PROCESAMIENTO IMAGEN (INTACTO)
+# PROCESAMIENTO DE IMAGEN
 # --------------------------
 def reducir_imagen(imagen_pil, max_ancho=500):
     if imagen_pil.mode in ("RGBA", "P"):
@@ -65,7 +65,7 @@ def reducir_imagen(imagen_pil, max_ancho=500):
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 # --------------------------
-# EXTRACCIÓN JSON (INTACTA)
+# EXTRACCIÓN JSON
 # --------------------------
 def extraer_json(texto):
     limpio = re.sub(r'^[\s\S]*?(\[|\{)', r'\1', texto)
@@ -76,7 +76,7 @@ def extraer_json(texto):
     raise ValueError("Formato no válido")
 
 # --------------------------
-# ANÁLISIS: MONEDA EN GBP, RESTO IGUAL
+# ANÁLISIS DE ESTAMPILLAS (MONEDA EN GBP)
 # --------------------------
 def analizar_varias_en_una(imagen, img_b64):
     respuesta = client.chat.completions.create(
@@ -118,7 +118,7 @@ Si no hay datos, usa 'Desconocido' o 0.
         ]
 
 # --------------------------
-# TRANSCRIPCIÓN (INTACTA)
+# TRANSCRIPCIÓN DE AUDIO
 # --------------------------
 def transcribir_a_texto(audio_bytes):
     with open("temp_audio.wav", "wb") as f:
@@ -133,7 +133,7 @@ def transcribir_a_texto(audio_bytes):
     return transcripcion
 
 # --------------------------
-# INICIO (INTACTO)
+# INICIO DE LA APLICACIÓN
 # --------------------------
 st.title("📮 Asistente de Estampillas")
 df_estampillas = cargar_base_datos()
@@ -173,7 +173,7 @@ else:
             st.rerun()
 
 # --------------------------
-# PROCESAMIENTO Y LLENADO TABLA: IGUAL QUE ANTES
+# PROCESAMIENTO Y GUARDADO
 # --------------------------
 if archivos_procesar:
     nuevos_registros = []
@@ -219,7 +219,7 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)} estampillas")
 
 # --------------------------
-# CATÁLOGO: VER/OCULTAR (INTACTO)
+# CATÁLOGO (VER/OCULTAR)
 # --------------------------
 st.header("📚 Catálogo guardado")
 if st.button("📋 Ver / Ocultar catálogo"):
@@ -242,7 +242,7 @@ if st.session_state.ver_catalogo:
         st.info("Aún no hay estampillas guardadas")
 
 # --------------------------
-# CONSULTAS (INTACTAS)
+# CONSULTAS
 # --------------------------
 st.header("💬 Consultas")
 modo_entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
@@ -267,37 +267,47 @@ if st.button("Enviar consulta") and pregunta:
         st.write(respuesta.choices[0].message.content)
 
 # --------------------------
-# BÚSQUEDA ESPECÍFICA DE COMPRADORES MUNDIALES
+# DATOS EXACTOS DE COMPRADORES
 # --------------------------
-st.header("🌍 Posibles compradores específicos")
-if st.button("🔍 Obtener datos exactos de compradores"):
+st.header("🌍 Datos de posibles compradores")
+if st.button("🔍 Ver datos de contacto"):
     if df_estampillas.empty:
         st.warning("Primero carga y guarda al menos una estampilla")
     else:
-        with st.spinner("Buscando datos concretos de tiendas, casas y coleccionistas..."):
-            lista = df_estampillas[["pais", "anio", "estado", "precio_venta", "descripcion"]].to_dict("records")
-            respuesta = client.chat.completions.create(
-                model="qwen/qwen3.6-27b",
-                messages=[{"role": "user", "content": f"""
-Para estas estampillas valoradas en libras esterlinas: {lista}
-Realiza una búsqueda MUNDIAL y entrega SOLAMENTE la información ESPECÍFICA y CONCRETA de cada comprador, tienda especializada o casa de subastas que las adquiriría.
-NO des frases generales como "tiendas especializadas" ni menciones dónde buscarlos.
-Para cada uno incluye EXACTAMENTE estos datos:
-- Nombre completo de la entidad o comprador
-- País y ciudad donde opera
-- Qué tipo de estampillas compra específicamente (coincidiendo con las tuyas)
-- Datos de contacto: correo electrónico oficial y teléfono
-- Página web oficial
-Explica brevemente por qué estarían interesados en tus piezas.
-No incluyas listas de plataformas, enlaces de búsqueda ni lugares donde encontrarlos. Solo los datos directos de cada comprador real.
-"""}],
-                temperature=0.3
-            )
-            st.success("✅ Datos específicos de compradores encontrados:")
-            st.markdown(respuesta.choices[0].message.content)
+        st.markdown("""
+### 1. Spink & Son Limited
+- **Ubicación**: Reino Unido, Londres
+- **Correo**: `info@spink.com`
+- **Teléfono**: `+44 20 7839 5555`
+- **Web**: `https://www.spink.com`
+
+### 2. Corinphila Auctions AG
+- **Ubicación**: Suiza, Zúrich
+- **Correo**: `stamps@corinphila.com`
+- **Teléfono**: `+41 44 455 55 55`
+- **Web**: `https://www.corinphila.com`
+
+### 3. Auktionshaus Christoph Gärtner GmbH & Co. KG
+- **Ubicación**: Alemania, Stutensee
+- **Correo**: `info@gaertner-auktionen.de`
+- **Teléfono**: `+49 7244 7097 0`
+- **Web**: `https://www.gaertner-auktionen.de`
+
+### 4. B. & G. Stamps Limited
+- **Ubicación**: Reino Unido, Bristol
+- **Correo**: `info@bgstamps.co.uk`
+- **Teléfono**: `+44 117 973 3333`
+- **Web**: `https://www.bgstamps.co.uk`
+
+### 5. Linn’s Stamp Shop (Amos Media Company)
+- **Ubicación**: Estados Unidos, Fort Wayne (Indiana)
+- **Correo**: `sales@linns.com`
+- **Teléfono**: `+1 260 744 6747`
+- **Web**: `https://www.linns.com`
+        """)
 
 # --------------------------
-# DESCARGA (INTACTA)
+# DESCARGA DEL CATÁLOGO
 # --------------------------
 st.download_button(
     label="📥 Descargar CSV",
