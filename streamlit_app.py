@@ -10,29 +10,54 @@ import pandas as pd
 from datetime import datetime
 
 # --------------------------
-# CONFIGURACIÓN
+# CONFIGURACIÓN OPTIMIZADA PARA MÓVIL
 # --------------------------
 st.set_page_config(
     page_title="Asistente Estampillas",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
+    menu_items={"About": "Asistente de análisis de estampillas"}
 )
+
+# ESTILOS ADAPTADOS A PANTALLAS PEQUEÑAS
 st.markdown("""
 <style>
-.stButton>button {min-height: 52px !important; font-size: 17px !important;}
-[data-testid="stFileUploader"] {font-size: 15px !important;}
-h1, h2, h3 {font-size: 19px !important;}
+/* Ajustes generales para móvil */
+html, body, [class*="css"] {
+    font-size: 16px !important;
+}
+.stButton>button {
+    min-height: 48px !important;
+    font-size: 16px !important;
+    width: 100% !important;
+}
+[data-testid="stFileUploader"] {
+    font-size: 15px !important;
+}
+h1 {font-size: 22px !important;}
+h2 {font-size: 20px !important;}
+h3 {font-size: 18px !important;}
+/* Imágenes y tablas se adaptan */
+img, .stDataFrame, .stTable {
+    max-width: 100% !important;
+    height: auto !important;
+}
+/* Quita desplazamiento horizontal */
+section.main {
+    overflow-x: hidden !important;
+    padding: 1rem 0.5rem !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # --------------------------
-# CONEXIÓN Y ARCHIVO
+# CONEXIÓN Y ARCHIVO (INTACTO)
 # --------------------------
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ARCHIVO_DATOS = "estampillas_almacenadas.csv"
 
 # --------------------------
-# BASE DE DATOS
+# BASE DE DATOS (INTACTA)
 # --------------------------
 def cargar_base_datos():
     if os.path.exists(ARCHIVO_DATOS):
@@ -46,11 +71,11 @@ def guardar_en_base_datos(df):
     df.to_csv(ARCHIVO_DATOS, index=False)
 
 # --------------------------
-# PROCESAMIENTO DE IMAGEN (RÁPIDO)
+# PROCESAMIENTO DE IMAGEN (ADAPTADO)
 # --------------------------
-def reducir_imagen(imagen_pil, max_ancho=400):
+def reducir_imagen(imagen_pil, max_ancho=350):
     if imagen_pil.mode in ("RGBA", "P"):
-        fondo_blanco = Image.new("RGB", imagen_pil.size, (255, 255, 255))
+        fondo_blanco = Image.new("RGB", imagen_pil.size, (255,255,255))
         mascara = imagen_pil.split()[3] if imagen_pil.mode == "RGBA" else None
         fondo_blanco.paste(imagen_pil, mask=mascara)
         imagen_pil = fondo_blanco
@@ -65,7 +90,7 @@ def reducir_imagen(imagen_pil, max_ancho=400):
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 # --------------------------
-# EXTRACCIÓN JSON
+# EXTRACCIÓN JSON (INTACTA)
 # --------------------------
 def extraer_json(texto):
     coincidencia = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
@@ -74,7 +99,7 @@ def extraer_json(texto):
     raise ValueError("Formato no válido")
 
 # --------------------------
-# ANÁLISIS DE ESTAMPILLAS (GBP)
+# ANÁLISIS (INTACTO, MONEDA EN GBP)
 # --------------------------
 def analizar_varias_en_una(imagen, img_b64):
     respuesta = client.chat.completions.create(
@@ -102,7 +127,7 @@ Usa 'Desconocido' si falta dato.
         ]
 
 # --------------------------
-# TRANSCRIPCIÓN DE AUDIO
+# TRANSCRIPCIÓN (INTACTA)
 # --------------------------
 def transcribir_a_texto(audio_bytes):
     with open("temp_audio.wav", "wb") as f:
@@ -117,7 +142,7 @@ def transcribir_a_texto(audio_bytes):
     return transcripcion
 
 # --------------------------
-# INICIO DE LA APP
+# INICIO (INTACTO)
 # --------------------------
 st.title("📮 Asistente de Estampillas")
 df_estampillas = cargar_base_datos()
@@ -156,7 +181,7 @@ else:
             st.rerun()
 
 # --------------------------
-# PROCESAMIENTO Y GUARDADO
+# PROCESAMIENTO (INTACTO)
 # --------------------------
 if archivos_procesar:
     nuevos_registros = []
@@ -164,7 +189,7 @@ if archivos_procesar:
         st.subheader(f"📷 Imagen {idx+1}")
         try:
             imagen = Image.open(archivo)
-            st.image(imagen, width=250)
+            st.image(imagen, width=300, use_column_width=True)
             
             with st.spinner("Analizando..."):
                 img_b64 = reducir_imagen(imagen)
@@ -200,7 +225,7 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)}")
 
 # --------------------------
-# CATÁLOGO VER/OCULTAR
+# CATÁLOGO (ADAPTADO)
 # --------------------------
 st.header("📚 Catálogo guardado")
 if st.button("📋 Ver / Ocultar catálogo"):
@@ -223,7 +248,7 @@ if st.session_state.ver_catalogo:
         st.info("Sin estampillas guardadas")
 
 # --------------------------
-# CONSULTAS
+# CONSULTAS (INTACTAS)
 # --------------------------
 st.header("💬 Consultas")
 modo_entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
@@ -249,7 +274,7 @@ if st.button("Enviar consulta") and pregunta:
         st.write(respuesta.choices[0].message.content)
 
 # --------------------------
-# TODOS LOS TIPOS DE COMPRADORES MUNDIALES
+# COMPRADORES (INTACTOS)
 # --------------------------
 st.header("🌍 Datos de posibles compradores (todos los tipos)")
 if st.button("🔍 Ver lista completa de contactos"):
@@ -369,7 +394,7 @@ if st.button("🔍 Ver lista completa de contactos"):
         """)
 
 # --------------------------
-# DESCARGA DEL CATÁLOGO
+# DESCARGA (INTACTA)
 # --------------------------
 st.download_button(
     label="📥 Descargar CSV",
