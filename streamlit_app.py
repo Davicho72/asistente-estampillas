@@ -40,7 +40,7 @@ st.markdown("""
 html, body, .stApp {width:100%!important;max-width:100%!important;overflow-x:hidden!important;margin:0!important;padding:0.5rem!important;}
 * {box-sizing:border-box!important;}
 .stButton>button {width:100%!important;min-height:48px!important;font-size:16px!important;margin:0.4rem 0!important;}
-.stFileUploader, .stCameraInput, .stTextArea {width:100%!important;font-size:15px!important;}
+.stFileUploader, .stCameraInput, .stTextArea, .stCheckbox {width:100%!important;font-size:15px!important;}
 h1 {font-size:22px!important;}h2 {font-size:20px!important;}h3 {font-size:18px!important;}
 img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 [data-testid="stSidebar"] {display:none!important;}
@@ -93,7 +93,7 @@ def analizar_estampa(img, b64):
     resp = client.chat.completions.create(
         model="qwen/qwen3.6-27b",
         messages=[{"role":"user","content":[
-            {"type":"text","text":"Identifica estampillas. Devuelve SOLO JSON: [{\"pais\":\"...\",\"anio\":\"...\",\"valor_facial\":\"...\",\"estado\":\"...\",\"precio_venta\":NUMERO_EN_GBP,\"descripcion\":\"...\"}] Usa 'Desconocido' si falta dato."},
+            {"type":"text","text":"Identifica cada estampilla. Devuelve SOLO JSON: [{\"pais\":\"...\",\"anio\":\"...\",\"valor_facial\":\"...\",\"estado\":\"...\",\"precio_venta\":\"NUMERO_EN_GBP\",\"descripcion\":\"...\"}] Usa 'Desconocido' si falta algún dato."},
             {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
         ]}],
         temperature=0.0, max_tokens=800
@@ -119,7 +119,7 @@ df = cargar_base_datos()
 if "activar_camara" not in st.session_state: st.session_state.activar_camara = False
 if "ver_catalogo" not in st.session_state: st.session_state.ver_catalogo = False
 
-# CARGA Y ANÁLISIS DE ESTAMPILLAS
+# CARGA Y ANÁLISIS + OPCIÓN DE GUARDAR O NO
 st.header("📤 Cargar o tomar estampillas")
 modo = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
 archivos = []
@@ -135,27 +135,41 @@ else:
         if st.button("❌ Cerrar cámara"): st.session_state.activar_camara = False; st.rerun()
 
 if archivos:
-    nuevos = []
+    nuevos_a_guardar = []
     for i, a in enumerate(archivos,1):
         st.subheader(f"📷 Imagen {i}")
         img = Image.open(a); st.image(img, width=300)
-        with st.spinner("Analizando..."):
+        with st.spinner("Analizando datos..."):
             b64 = reducir_imagen(img)
             estampas = analizar_estampa(img, b64)
-            st.success(f"✅ {len(estampas)} estampillas")
+            st.success(f"✅ {len(estampas)} estampillas detectadas:")
             for n, d in enumerate(estampas,1):
-                st.write(f"**{n}:** £{d.get('precio_venta',0):.2f} GBP")
-                nuevos.append({
-                    "id": len(df)+len(nuevos)+1, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "pais": d.get("pais","Desconocido"), "anio": d.get("anio","Desconocido"),
-                    "valor_facial": d.get("valor_facial","Desconocido"), "estado": d.get("estado","Desconocido"),
-                    "precio_venta": d.get("precio_venta",0), "descripcion": d.get("descripcion","Sin detalles"),
-                    "imagen_b64": b64
-                })
-    if nuevos:
-        guardar_en_base_datos(nuevos)
-        df = pd.concat([df, pd.DataFrame(nuevos)], ignore_index=True)
-        st.success(f"📦 Guardadas: {len(nuevos)}")
+                st.markdown(f"""
+**Estampilla {n}**
+- 📍 País: {d.get('pais','Desconocido')}
+- 📅 Año: {d.get('anio','Desconocido')}
+- 💷 Valor facial: {d.get('valor_facial','Desconocido')}
+- 📋 Estado: {d.get('estado','Desconocido')}
+- 💰 Precio venta: £{d.get('precio_venta',0):.2f} GBP
+- 📝 Descripción: {d.get('descripcion','Sin detalles')}
+                """)
+                # ✅ OPCIÓN DE ELEGIR: GUARDAR O NO
+                guardar = st.checkbox(f"📦 Guardar esta estampilla en la base de datos", value=True, key=f"guardar_{i}_{n}")
+                if guardar:
+                    nuevos_a_guardar.append({
+                        "id": len(df)+len(nuevos_a_guardar)+1, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "pais": d.get("pais","Desconocido"), "anio": d.get("anio","Desconocido"),
+                        "valor_facial": d.get("valor_facial","Desconocido"), "estado": d.get("estado","Desconocido"),
+                        "precio_venta": d.get("precio_venta",0), "descripcion": d.get("descripcion","Sin detalles"),
+                        "imagen_b64": b64
+                    })
+    # GUARDA SOLO LAS QUE MARCASTE
+    if nuevos_a_guardar:
+        guardar_en_base_datos(nuevos_a_guardar)
+        df = pd.concat([df, pd.DataFrame(nuevos_a_guardar)], ignore_index=True)
+        st.success(f"📦 Guardadas: {len(nuevos_a_guardar)} en Airtable")
+    elif archivos:
+        st.info("ℹ️ No se guardó ninguna estampilla: desmarcaste todas las opciones.")
 
 # CATÁLOGO GUARDADO
 st.header("📚 Catálogo guardado")
@@ -164,10 +178,10 @@ if st.session_state.ver_catalogo and not df.empty:
     m = df.copy()
     m["precio_venta"] = m["precio_venta"].apply(lambda x: f"£{x:.2f} GBP")
     m["Imagen"] = m["imagen_b64"].apply(lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
-    st.dataframe(m[["id","fecha","pais","anio","precio_venta","Imagen"]],
+    st.dataframe(m[["id","fecha","pais","anio","valor_facial","estado","precio_venta","descripcion","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# 🔍 BUSCAR COMPRADORES Y CONTACTOS (FORMATO ORDENADO)
+# 🔍 BUSCAR COMPRADORES: FORMATO ORDENADO
 st.header("🌍 Buscar compradores y contactos")
 st.info("Al pulsar se mostrará la información ordenada: tiendas, webs, subastas, contactos y asociaciones.")
 
@@ -175,7 +189,7 @@ if st.button("🔍 Buscar ahora"):
     if df.empty:
         st.warning("Primero carga y guarda al menos una estampilla.")
     else:
-        with st.spinner("Cargando información ordenada..."):
+        with st.spinner("Cargando información..."):
             st.success("✅ Resultados completos y actualizados:")
             st.markdown("""
 ---
@@ -248,17 +262,11 @@ if st.button("🔍 Buscar ahora"):
 
 ---
 
-#### 🧑‍🤝‍🧑 Personas naturales y coleccionistas
-- No hay datos públicos de contactos individuales por normas de privacidad (GDPR).
-- Publica tus piezas en los grupos o plataformas indicadas: ellos te contactarán a ti.
-
----
-
-#### 💷 Precios de referencia en Libras Esterlinas (£)
-- Sellos comunes: **£0.30 – £3.00**
-- Emisiones temáticas completas: **£2.00 – £25.00**
-- Piezas antiguas o raras: **£15.00 – £500+**
-- Bloques y pruebas sin emitir: **£10.00 – £200+**
+#### 💷 Precios de referencia en £
+- Comunes: **£0.30 – £3.00**
+- Emisiones completas: **£2.00 – £25.00**
+- Antiguas o raras: **£15.00 – £500+**
+- Bloques y pruebas: **£10.00 – £200+**
 """)
 
 # CONSULTAS GENERALES
