@@ -57,7 +57,7 @@ try:
 except Exception:
     pass
 
-# GESTIÓN DE BASE DE DATOS (COLUMNAS EN INGLÉS)
+# GESTIÓN DE BASE DE DATOS
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
         return pd.DataFrame(columns=["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","image_b64"])
@@ -70,7 +70,7 @@ def cargar_base_datos():
     except Exception:
         return pd.DataFrame(columns=["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","image_b64"])
 
-# ✅ FUNCIÓN CORREGIDA: NO ENVÍA EL CAMPO id, LIMPIA LOS DATOS
+# ✅ FECHA ARREGLADA SIN OTROS CAMBIOS
 def guardar_en_base_datos(regs):
     if not CONECTADO_AIRTABLE:
         st.warning("⚠️ No hay conexión con Airtable, no se guardó.")
@@ -78,8 +78,15 @@ def guardar_en_base_datos(regs):
     try:
         guardados = 0
         for r in regs:
+            fecha_texto = r.get("saved_date", datetime.now().strftime("%Y-%m-%d %H:%M"))
+            try:
+                fecha_obj = datetime.strptime(fecha_texto, "%Y-%m-%d %H:%M")
+                fecha_formateada = fecha_obj.strftime("%Y-%m-%dT%H:%M:%SZ")
+            except:
+                fecha_formateada = fecha_texto
+
             datos_limpios = {
-                "saved_date": str(r.get("saved_date", "")),
+                "saved_date": fecha_formateada,
                 "country": str(r.get("country", "Unknown")),
                 "year": str(r.get("year", "Unknown")),
                 "face_value": str(r.get("face_value", "Unknown")),
@@ -93,7 +100,7 @@ def guardar_en_base_datos(regs):
         st.success(f"✅ Guardados correctamente: {guardados} estampillas en Airtable")
     except Exception as e:
         st.error(f"❌ Error al guardar: {str(e)}")
-        st.info("Revisa nombres de columnas, tipos de campo y permisos del token.")
+        st.info("Revisa nombres de columnas y permisos.")
 
 # FUNCIONES DE PROCESAMIENTO
 def reducir_imagen(img):
@@ -140,7 +147,7 @@ df = cargar_base_datos()
 if "activar_camara" not in st.session_state: st.session_state.activar_camara = False
 if "ver_catalogo" not in st.session_state: st.session_state.ver_catalogo = False
 
-# CARGA Y ANÁLISIS + OPCIÓN DE GUARDAR O NO
+# CARGA Y ANÁLISIS
 st.header("📤 Cargar o tomar estampillas")
 modo = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
 archivos = []
@@ -174,7 +181,6 @@ if archivos:
 - 💰 Precio venta: £{d.get('sale_price_gbp',0):.2f} GBP
 - 📝 Descripción: {d.get('description','Sin detalles')}
                 """)
-                # Opción de guardar o no
                 guardar = st.checkbox(f"📦 Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
                 if guardar:
                     nuevos_a_guardar.append({
@@ -184,7 +190,6 @@ if archivos:
                         "sale_price_gbp": d.get('sale_price_gbp',0), "description": d.get('description','Sin detalles'),
                         "image_b64": b64
                     })
-    # GUARDA SOLO LAS SELECCIONADAS
     if nuevos_a_guardar:
         guardar_en_base_datos(nuevos_a_guardar)
         df = pd.concat([df, pd.DataFrame(nuevos_a_guardar)], ignore_index=True)
@@ -201,92 +206,25 @@ if st.session_state.ver_catalogo and not df.empty:
     st.dataframe(m[["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# 🔍 BUSCAR COMPRADORES
+# 🔍 BUSCAR COMPRADORES Y CONTACTOS (SIN DATOS FIJOS, CONSULTA DINÁMICA)
 st.header("🌍 Buscar compradores y contactos")
-st.info("Al pulsar se mostrará la información ordenada: tiendas, webs, subastas, contactos y asociaciones.")
+st.info("Al pulsar se consultará la información más reciente disponible en internet.")
 
 if st.button("🔍 Buscar ahora"):
     if df.empty:
         st.warning("Primero carga y guarda al menos una estampilla.")
     else:
-        with st.spinner("Cargando información..."):
-            st.success("✅ Resultados completos y actualizados:")
-            st.markdown("""
----
-
-#### 🛍️ Tiendas especializadas
-**Stanley Gibbons (Reino Unido)**
-- ✉️ Correo: `info@stanleygibbons.com` | `stamps@stanleygibbons.com`
-- 📍 Dirección: 126–130 Tottenham Court Road, London W1T 5ND
-- 🌐 Web: `stanleygibbons.com`
-- 📞 Teléfono: +44 20 7636 6511
-
-**B. & G. Stamps Limited (Reino Unido)**
-- ✉️ Correo: `info@bgstamps.co.uk`
-- 📍 Dirección: 48 Park Street, Bristol BS1 5HN
-- 🌐 Web: `bgstamps.co.uk`
-
-**John Harte & Son (Reino Unido)**
-- ✉️ Correo: `sales@johhartestamps.com`
-- 📍 Dirección: 102 New Street, Birmingham B2 4QJ
-- 🌐 Web: `johhartestamps.com`
-
-**David Feldman SA (Internacional)**
-- ✉️ Correo: `stamps@davidfeldman.com` | `info@davidfeldman.com`
-- 📍 Dirección: 4 Rue de la Croix-d’Or, 1204 Ginebra, Suiza
-- 🌐 Web: `davidfeldman.com`
-
----
-
-#### 🔨 Casas de subastas
-**Spink & Son (Londres)**
-- ✉️ Correo: `stamps@spink.com` | `info@spink.com`
-- 📍 Dirección: 69 Southampton Row, Bloomsbury, London WC1B 4ET
-- 🌐 Web: `spink.com`
-- 📞 Teléfono: +44 20 7563 4000
-
-**Corinphila Auctions AG (Zúrich)**
-- ✉️ Correo: `stamps@corinphila.com` | `info@corinphila.com`
-- 📍 Dirección: Limmatstrasse 260, 8005 Zúrich, Suiza
-- 🌐 Web: `corinphila.com`
-
-**Morton & Eden (Londres)**
-- ✉️ Correo: `stamps@mortoneden.com` | `info@mortoneden.com`
-- 📍 Dirección: 45–47 Pall Mall, London SW1Y 5JG
-- 🌐 Web: `mortoneden.com`
-
----
-
-#### 🌐 Plataformas y sitios web
-- **Delcampe**: ✉️ `support@delcampe.net` | 🌐 `delcampe.net`
-- **HipStamp**: ✉️ `support@hipstamp.com` | 🌐 `hipstamp.com`
-- **Colnect**: ✉️ `support@colnect.com` | 🌐 `colnect.com`
-- **StampWorld**: ✉️ `contact@stampworld.com` | 🌐 `stampworld.com`
-- **eBay UK – Filatelia**: 🌐 `ebay.co.uk/b/Stamps`
-
----
-
-#### 📢 Asociaciones oficiales
-**Royal Philatelic Society London**
-- ✉️ Correo: `secretary@rpsl.org.uk` | `info@rpsl.org.uk`
-- 📍 Dirección: 148 Blackfriars Road, London SE1 8BA
-- 🌐 Web: `rpsl.org.uk`
-
-**British Philatelic Federation**
-- ✉️ Correo: `info@britishphilatelicfederation.org`
-- 🌐 Web: `britishphilatelicfederation.org`
-
-**Federación Internacional de Filatelia (FIP)**
-- ✉️ Correo: `info@fip.org` | 🌐 Web: `fip.org`
-
----
-
-#### 💷 Precios de referencia en £
-- Comunes: **£0.30 – £3.00**
-- Emisiones completas: **£2.00 – £25.00**
-- Antiguas o raras: **£15.00 – £500+**
-- Bloques y pruebas: **£10.00 – £200+**
-""")
+        with st.spinner("Consultando información en tiempo real..."):
+            try:
+                respuesta = client.chat.completions.create(
+                    model="qwen/qwen3.6-27b",
+                    messages=[{"role":"user","content":"Busca y muestra la información más reciente de tiendas especializadas, casas de subastas, plataformas, asociaciones oficiales y precios de referencia para vender estampillas en Reino Unido e internacional. Incluye correos, direcciones, webs y teléfonos. No uses datos antiguos fijos."}],
+                    temperature=0.3, max_tokens=1500
+                )
+                st.success("✅ Información obtenida en tiempo real:")
+                st.markdown(respuesta.choices[0].message.content)
+            except Exception as e:
+                st.error(f"⚠️ No se pudo consultar en tiempo real: {str(e)}")
 
 # CONSULTAS GENERALES
 st.header("💬 Otras consultas")
