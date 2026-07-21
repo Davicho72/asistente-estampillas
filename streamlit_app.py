@@ -70,9 +70,30 @@ def cargar_base_datos():
     except Exception:
         return pd.DataFrame(columns=["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","image_b64"])
 
+# ✅ FUNCIÓN CORREGIDA: NO ENVÍA EL CAMPO id, LIMPIA LOS DATOS
 def guardar_en_base_datos(regs):
-    if CONECTADO_AIRTABLE:
-        for r in regs: tabla_airtable.create(r)
+    if not CONECTADO_AIRTABLE:
+        st.warning("⚠️ No hay conexión con Airtable, no se guardó.")
+        return
+    try:
+        guardados = 0
+        for r in regs:
+            datos_limpios = {
+                "saved_date": str(r.get("saved_date", "")),
+                "country": str(r.get("country", "Unknown")),
+                "year": str(r.get("year", "Unknown")),
+                "face_value": str(r.get("face_value", "Unknown")),
+                "condition": str(r.get("condition", "Unknown")),
+                "sale_price_gbp": float(r.get("sale_price_gbp", 0)) if r.get("sale_price_gbp") not in [None, ""] else 0.0,
+                "description": str(r.get("description", "No details")),
+                "image_b64": str(r.get("image_b64", ""))
+            }
+            tabla_airtable.create(datos_limpios)
+            guardados += 1
+        st.success(f"✅ Guardados correctamente: {guardados} estampillas en Airtable")
+    except Exception as e:
+        st.error(f"❌ Error al guardar: {str(e)}")
+        st.info("Revisa nombres de columnas, tipos de campo y permisos del token.")
 
 # FUNCIONES DE PROCESAMIENTO
 def reducir_imagen(img):
@@ -153,7 +174,7 @@ if archivos:
 - 💰 Precio venta: £{d.get('sale_price_gbp',0):.2f} GBP
 - 📝 Descripción: {d.get('description','Sin detalles')}
                 """)
-                # ✅ Opción de guardar o no
+                # Opción de guardar o no
                 guardar = st.checkbox(f"📦 Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
                 if guardar:
                     nuevos_a_guardar.append({
@@ -167,7 +188,6 @@ if archivos:
     if nuevos_a_guardar:
         guardar_en_base_datos(nuevos_a_guardar)
         df = pd.concat([df, pd.DataFrame(nuevos_a_guardar)], ignore_index=True)
-        st.success(f"📦 Guardadas correctamente: {len(nuevos_a_guardar)} estampillas")
     elif archivos:
         st.info("ℹ️ No se guardó ninguna: desmarcaste todas las opciones.")
 
@@ -181,7 +201,7 @@ if st.session_state.ver_catalogo and not df.empty:
     st.dataframe(m[["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# 🔍 BUSCAR COMPRADORES: FORMATO ORDENADO
+# 🔍 BUSCAR COMPRADORES
 st.header("🌍 Buscar compradores y contactos")
 st.info("Al pulsar se mostrará la información ordenada: tiendas, webs, subastas, contactos y asociaciones.")
 
@@ -257,8 +277,7 @@ if st.button("🔍 Buscar ahora"):
 - 🌐 Web: `britishphilatelicfederation.org`
 
 **Federación Internacional de Filatelia (FIP)**
-- ✉️ Correo: `info@fip.org`
-- 🌐 Web: `fip.org`
+- ✉️ Correo: `info@fip.org` | 🌐 Web: `fip.org`
 
 ---
 
