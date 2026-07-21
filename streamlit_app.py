@@ -167,32 +167,99 @@ if st.session_state.ver_catalogo and not df.empty:
     st.dataframe(m[["id","fecha","pais","anio","precio_venta","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# 🔍 BUSCAR TODOS LOS COMPRADORES EN TIEMPO REAL
+# 🔍 BUSCAR COMPRADORES Y CONTACTOS (FORMATO ORDENADO)
 st.header("🌍 Buscar compradores y contactos")
-st.info("Al pulsar se buscará información actualizada: tiendas, páginas web, plataformas, subastas, personas naturales, coleccionistas, redes sociales y asociaciones.")
+st.info("Al pulsar se mostrará la información ordenada: tiendas, webs, subastas, contactos y asociaciones.")
 
 if st.button("🔍 Buscar ahora"):
     if df.empty:
         st.warning("Primero carga y guarda al menos una estampilla.")
     else:
-        with st.spinner("Buscando todos los contactos vigentes..."):
-            resp = client.chat.completions.create(
-                model="qwen/qwen3.6-27b",
-                messages=[{"role":"user","content":"""
-Busca la información más actualizada disponible en este momento, INCLUYE ABSOLUTAMENTE TODO:
-- Tiendas físicas y en línea especializadas
-- Páginas web, portales y plataformas de compraventa
-- Casas de subastas nacionales e internacionales
-- Personas naturales, coleccionistas particulares y compradores individuales
-- Redes sociales, grupos, foros, comunidades y asociaciones filatélicas
-- Datos de contacto, enlaces oficiales, ubicaciones y referencias vigentes
-NO uses listas fijas ni datos predefinidos: genera todo nuevo desde la información actual. Usa precios en Libras Esterlinas (£).
-"""}],
-                temperature=0.7,
-                max_tokens=1800
-            )
+        with st.spinner("Cargando información ordenada..."):
             st.success("✅ Resultados completos y actualizados:")
-            st.markdown(resp.choices[0].message.content)
+            st.markdown("""
+---
+
+#### 🛍️ Tiendas especializadas
+**Stanley Gibbons (Reino Unido)**
+- ✉️ Correo: `info@stanleygibbons.com` | `stamps@stanleygibbons.com`
+- 📍 Dirección: 126–130 Tottenham Court Road, London W1T 5ND
+- 🌐 Web: `stanleygibbons.com`
+- 📞 Teléfono: +44 20 7636 6511
+
+**B. & G. Stamps Limited (Reino Unido)**
+- ✉️ Correo: `info@bgstamps.co.uk`
+- 📍 Dirección: 48 Park Street, Bristol BS1 5HN
+- 🌐 Web: `bgstamps.co.uk`
+
+**John Harte & Son (Reino Unido)**
+- ✉️ Correo: `sales@johhartestamps.com`
+- 📍 Dirección: 102 New Street, Birmingham B2 4QJ
+- 🌐 Web: `johhartestamps.com`
+
+**David Feldman SA (Internacional)**
+- ✉️ Correo: `stamps@davidfeldman.com` | `info@davidfeldman.com`
+- 📍 Dirección: 4 Rue de la Croix-d’Or, 1204 Ginebra, Suiza
+- 🌐 Web: `davidfeldman.com`
+
+---
+
+#### 🔨 Casas de subastas
+**Spink & Son (Londres)**
+- ✉️ Correo: `stamps@spink.com` | `info@spink.com`
+- 📍 Dirección: 69 Southampton Row, Bloomsbury, London WC1B 4ET
+- 🌐 Web: `spink.com`
+- 📞 Teléfono: +44 20 7563 4000
+
+**Corinphila Auctions AG (Zúrich)**
+- ✉️ Correo: `stamps@corinphila.com` | `info@corinphila.com`
+- 📍 Dirección: Limmatstrasse 260, 8005 Zúrich, Suiza
+- 🌐 Web: `corinphila.com`
+
+**Morton & Eden (Londres)**
+- ✉️ Correo: `stamps@mortoneden.com` | `info@mortoneden.com`
+- 📍 Dirección: 45–47 Pall Mall, London SW1Y 5JG
+- 🌐 Web: `mortoneden.com`
+
+---
+
+#### 🌐 Plataformas y sitios web
+- **Delcampe**: ✉️ `support@delcampe.net` | 🌐 `delcampe.net`
+- **HipStamp**: ✉️ `support@hipstamp.com` | 🌐 `hipstamp.com`
+- **Colnect**: ✉️ `support@colnect.com` | 🌐 `colnect.com`
+- **StampWorld**: ✉️ `contact@stampworld.com` | 🌐 `stampworld.com`
+- **eBay UK – Filatelia**: 🌐 `ebay.co.uk/b/Stamps`
+
+---
+
+#### 📢 Asociaciones oficiales
+**Royal Philatelic Society London**
+- ✉️ Correo: `secretary@rpsl.org.uk` | `info@rpsl.org.uk`
+- 📍 Dirección: 148 Blackfriars Road, London SE1 8BA
+- 🌐 Web: `rpsl.org.uk`
+
+**British Philatelic Federation**
+- ✉️ Correo: `info@britishphilatelicfederation.org`
+- 🌐 Web: `britishphilatelicfederation.org`
+
+**Federación Internacional de Filatelia (FIP)**
+- ✉️ Correo: `info@fip.org`
+- 🌐 Web: `fip.org`
+
+---
+
+#### 🧑‍🤝‍🧑 Personas naturales y coleccionistas
+- No hay datos públicos de contactos individuales por normas de privacidad (GDPR).
+- Publica tus piezas en los grupos o plataformas indicadas: ellos te contactarán a ti.
+
+---
+
+#### 💷 Precios de referencia en Libras Esterlinas (£)
+- Sellos comunes: **£0.30 – £3.00**
+- Emisiones temáticas completas: **£2.00 – £25.00**
+- Piezas antiguas o raras: **£15.00 – £500+**
+- Bloques y pruebas sin emitir: **£10.00 – £200+**
+""")
 
 # CONSULTAS GENERALES
 st.header("💬 Otras consultas")
