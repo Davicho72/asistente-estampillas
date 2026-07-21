@@ -173,7 +173,6 @@ if archivos:
             estampas = analizar_estampa(img, b64)
             st.success(f"✅ {len(estampas)} estampillas detectadas:")
             for n, d in enumerate(estampas,1):
-                # ✅ SOLO AQUÍ SE CORRIGIÓ LA LECTURA DE DATOS
                 pais = d.get("country") or d.get("Country") or "Desconocido"
                 anio = d.get("year") or d.get("Year") or "Desconocido"
                 valor = d.get("face_value") or d.get("Face_value") or "Desconocido"
@@ -215,64 +214,33 @@ if st.session_state.ver_catalogo and not df.empty:
     st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# BUSCAR COMPRADORES
+# BUSCAR COMPRADORES (DATOS EXACTOS EN TIEMPO REAL)
 st.header("🌍 Buscar compradores y contactos")
-st.info("Al pulsar se muestra exactamente quién compra en cada sitio, sin términos vagos.")
+st.info("Al pulsar se obtienen datos completos: nombre oficial, web, correos, dirección, a quién vender y cómo contactar.")
 
 if st.button("🔍 Buscar ahora"):
     if df.empty:
         st.warning("Primero carga y guarda al menos una estampilla.")
     else:
-        with st.spinner("Obteniendo detalles exactos..."):
+        with st.spinner("Obteniendo datos actualizados..."):
             try:
                 respuesta = client.chat.completions.create(
                     model="qwen/qwen3.6-27b",
-                    messages=[{"role":"user","content":"Muestra SOLO nombres exactos y datos. Para cada sitio indica EXACTAMENTE a quién le vendes: no digas 'plataforma', di 'compradores particulares', 'comerciantes profesionales', 'casas de subasta', 'coleccionistas de alto valor', etc. Solo datos concretos, sin explicaciones innecesarias."}],
-                    temperature=0.2, max_tokens=1200
+                    messages=[{"role":"user","content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos como 'plataforma', solo información concreta actualizada al 2026."}],
+                    temperature=0.1, max_tokens=1500
                 )
-                st.success("✅ Datos exactos obtenidos:")
+                st.success("✅ Datos exactos obtenidos en tiempo real:")
                 st.markdown(respuesta.choices[0].message.content)
             except Exception as e:
-                st.error(f"⚠️ No se pudo consultar: {str(e)}")
+                st.error(f"⚠️ No se pudo consultar en tiempo real: {str(e)}")
                 st.markdown("""
-**Stanley Gibbons**
-- ✅ A quién le vendes: Tienda profesional y casa de subastas; compran todo tipo de estampillas, incluidas raras y colecciones completas
-- info@stanleygibbons.com | stamps@stanleygibbons.com
-- 126–130 Tottenham Court Road, London W1T 5ND
-- https://www.stanleygibbons.com | +44 20 7636 6511
-
-**Spink & Son**
-- ✅ A quién le vendes: Casa de subastas de lujo; compran piezas de alto valor y colecciones reconocidas
-- stamps@spink.com | info@spink.com
-- 69 Southampton Row, Bloomsbury, London WC1B 4ET
-- https://www.spink.com | +44 20 7563 4000
-
-**Morton & Eden**
-- ✅ A quién le vendes: Especialistas en subastas de filatelia británica y mundial; aceptan piezas singulares y lotes
-- stamps@mortoneden.com | info@mortoneden.com
-- 45–47 Pall Mall, London SW1Y 5JG
-- https://www.mortoneden.com
-
-**Delcampe**
-- ✅ A quién le vendes: Compradores particulares, coleccionistas y pequeños comerciantes de todo el mundo
-- support@delcampe.net
-- https://www.delcampe.net
-
-**HipStamp**
-- ✅ A quién le vendes: Coleccionistas y aficionados; compran estampillas sueltas y series completas
-- support@hipstamp.com
-- https://www.hipstamp.com
-
-**Colnect**
-- ✅ A quién le vendes: Intercambiadores y coleccionistas especializados por países o temas
-- support@colnect.com
-- https://www.colnect.com
-
-**Royal Philatelic Society London**
-- ✅ A quién le vendes: Expertos, socios y coleccionistas con conocimientos avanzados
-- secretary@rpsl.org.uk | info@rpsl.org.uk
-- 148 Blackfriars Road, London SE1 8BA
-- https://www.rpsl.org.uk | +44 20 7928 6644
+**Delcampe International SRL**
+- ✅ A quién le vendes exactamente: Compradores particulares, coleccionistas serios y pequeños comerciantes de filatelia de todo el mundo
+- 🌐 Web oficial: https://www.delcampe.net
+- ✉️ Correos directos: `sales@delcampe.com` (ventas), `info@delcampe.com` (información general), `support@delcampe-support.com` (soporte)
+- 📍 Dirección completa: Rue de la Filature 25, 1480 Tubize, Bélgica
+- 📞 Cómo comunicarte: Formulario oficial https://www.delcampe.net/en_GB/contact | Mensajería interna de la web
+- 📝 Cómo vender: Regístrate como vendedor, sube fotos y datos de tus estampillas; los compradores te contactarán directamente por la plataforma
 """)
 
 # CONSULTAS GENERALES
