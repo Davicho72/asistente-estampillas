@@ -6,6 +6,7 @@ import io
 import os
 import json
 import re
+import time
 import pandas as pd
 from datetime import datetime
 from pyairtable import Api
@@ -111,27 +112,36 @@ def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
     return json.loads(m.group()) if m else None
 
+# ✅ FUNCIÓN CON PROTECCIÓN CONTRA LÍMITES DE GROQ
 def analizar_estampa(img, b64):
-    resp = client.chat.completions.create(
-        model="qwen/qwen3.6-27b",
-        messages=[{"role":"user","content":[
-            {"type":"text","text":"Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."},
-            {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
-        ]}],
-        temperature=0.0, max_tokens=800
-    )
-    try:
-        res = extraer_json(resp.choices[0].message.content)
-        return res if isinstance(res,list) else [res]
-    except Exception:
-        return [{
-            "country":"Desconocido",
-            "year":"Desconocido",
-            "face_value":"Desconocido",
-            "condition":"Desconocido",
-            "sale_price_gbp":0.0,
-            "description":"No se pudo analizar la imagen correctamente"
-        }]
+    max_intentos = 3
+    for intento in range(max_intentos):
+        try:
+            resp = client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=[{"role":"user","content":[
+                    {"type":"text","text":"Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."},
+                    {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
+                ]}],
+                temperature=0.0, max_tokens=800
+            )
+            res = extraer_json(resp.choices[0].message.content)
+            return res if isinstance(res,list) else [res]
+        except Exception as e:
+            error_texto = str(e).lower()
+            if "ratelimit" in error_texto or "429" in error_texto:
+                if intento < max_intentos - 1:
+                    st.warning(f"⏳ Límite temporal alcanzado, esperando {intento+1}s antes de reintentar...")
+                    time.sleep(intento + 1)
+                    continue
+            return [{
+                "country":"Desconocido",
+                "year":"Desconocido",
+                "face_value":"Desconocido",
+                "condition":"Desconocido",
+                "sale_price_gbp":0.0,
+                "description":"Límite de uso alcanzado. Espera unos minutos y vuelve a probar."
+            }]
 
 def transcribir_audio(audio):
     with open("temp.wav","wb") as f: f.write(audio.read())
