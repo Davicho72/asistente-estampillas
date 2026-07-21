@@ -2,3 +2,4 @@ streamlit
 groq
 pillow
 pandas
+pyairtable>=2.0.0
