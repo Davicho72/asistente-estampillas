@@ -8,6 +8,7 @@ import json
 import re
 import pandas as pd
 from datetime import datetime
+from pyairtable import Api
 
 # --------------------------
 # CONFIGURACIÓN COMPATIBLE CON TODOS LOS NAVEGADORES MÓVILES
@@ -54,24 +55,66 @@ img, .stDataFrame, .stTable {
 """, unsafe_allow_html=True)
 
 # --------------------------
-# CONEXIÓN Y ARCHIVO (INTACTO)
+# CONEXIÓN GROQ Y AIRTABLE (NUEVO)
 # --------------------------
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-ARCHIVO_DATOS = "estampillas_almacenadas.csv"
+
+# Conexión a Airtable
+try:
+    AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
+    AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
+    AIRTABLE_TABLA = os.getenv("AIRTABLE_TABLA")
+    
+    if all([AIRTABLE_API_KEY, AIRTABLE_BASE_ID, AIRTABLE_TABLA]):
+        api_airtable = Api(AIRTABLE_API_KEY)
+        tabla_airtable = api_airtable.table(AIRTABLE_BASE_ID, AIRTABLE_TABLA)
+        CONECTADO_AIRTABLE = True
+    else:
+        CONECTADO_AIRTABLE = False
+except Exception:
+    CONECTADO_AIRTABLE = False
 
 # --------------------------
-# BASE DE DATOS (INTACTA)
+# BASE DE DATOS: LECTURA Y GUARDADO EN AIRTABLE (NUEVO)
 # --------------------------
 def cargar_base_datos():
-    if os.path.exists(ARCHIVO_DATOS):
-        return pd.read_csv(ARCHIVO_DATOS, converters={"imagen_b64": str})
-    return pd.DataFrame(columns=[
-        "id", "fecha", "pais", "anio", "valor_facial", "estado", 
-        "precio_venta", "descripcion", "imagen_b64"
-    ])
+    if not CONECTADO_AIRTABLE:
+        return pd.DataFrame(columns=[
+            "id", "fecha", "pais", "anio", "valor_facial", "estado", 
+            "precio_venta", "descripcion", "imagen_b64"
+        ])
+    try:
+        registros = tabla_airtable.all()
+        datos = []
+        for reg in registros:
+            campos = reg["fields"]
+            datos.append({
+                "id": campos.get("id"),
+                "fecha": campos.get("fecha"),
+                "pais": campos.get("pais"),
+                "anio": campos.get("anio"),
+                "valor_facial": campos.get("valor_facial"),
+                "estado": campos.get("estado"),
+                "precio_venta": campos.get("precio_venta"),
+                "descripcion": campos.get("descripcion"),
+                "imagen_b64": campos.get("imagen_b64")
+            })
+        return pd.DataFrame(datos)
+    except Exception:
+        return pd.DataFrame(columns=[
+            "id", "fecha", "pais", "anio", "valor_facial", "estado", 
+            "precio_venta", "descripcion", "imagen_b64"
+        ])
 
-def guardar_en_base_datos(df):
-    df.to_csv(ARCHIVO_DATOS, index=False)
+def guardar_en_base_datos(nuevos_registros):
+    if not CONECTADO_AIRTABLE:
+        st.warning("⚠️ No se guardó en Airtable: faltan configuraciones")
+        return
+    try:
+        for reg in nuevos_registros:
+            tabla_airtable.create(reg)
+    except Exception as e:
+        st.error(f"❌ Error al guardar en Airtable: {str(e)}")
 
 # --------------------------
 # PROCESAMIENTO DE IMAGEN (INTACTO)
@@ -148,6 +191,13 @@ def transcribir_a_texto(audio_bytes):
 # INICIO (INTACTO)
 # --------------------------
 st.title("📮 Asistente de Estampillas")
+
+# Estado de conexión a Airtable
+if CONECTADO_AIRTABLE:
+    st.success("✅ Conectado correctamente a Airtable")
+else:
+    st.warning("⚠️ Sin conexión a Airtable: configura las variables de entorno")
+
 df_estampillas = cargar_base_datos()
 
 if "activar_camara" not in st.session_state:
@@ -184,7 +234,7 @@ else:
             st.rerun()
 
 # --------------------------
-# PROCESAMIENTO (INTACTO)
+# PROCESAMIENTO Y GUARDADO EN AIRTABLE (INTACTO EN FUNCIONES)
 # --------------------------
 if archivos_procesar:
     nuevos_registros = []
@@ -207,7 +257,7 @@ if archivos_procesar:
                     st.write(f"**{num}:** £{datos.get('precio_venta',0):.2f} GBP")
                     
                     nuevo_id = len(df_estampillas) + len(nuevos_registros) + 1
-                    nuevos_registros.append({
+                    nuevo_reg = {
                         "id": nuevo_id,
                         "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         "pais": datos.get("pais", "Desconocido"),
@@ -217,15 +267,15 @@ if archivos_procesar:
                         "precio_venta": datos.get("precio_venta", 0),
                         "descripcion": datos.get("descripcion", "Sin detalles"),
                         "imagen_b64": img_b64
-                    })
+                    }
+                    nuevos_registros.append(nuevo_reg)
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
     
     if nuevos_registros:
-        df_nuevos = pd.DataFrame(nuevos_registros)
-        df_estampillas = pd.concat([df_estampillas, df_nuevos], ignore_index=True)
-        guardar_en_base_datos(df_estampillas)
-        st.success(f"📦 Guardadas: {len(nuevos_registros)}")
+        guardar_en_base_datos(nuevos_registros)
+        df_estampillas = pd.concat([df_estampillas, pd.DataFrame(nuevos_registros)], ignore_index=True)
+        st.success(f"📦 Guardadas: {len(nuevos_registros)} en Airtable")
 
 # --------------------------
 # CATÁLOGO (INTACTO)
