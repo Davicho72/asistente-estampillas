@@ -11,6 +11,30 @@ from datetime import datetime
 from pyairtable import Api
 
 # --------------------------
+# 🔒 PROTECCIÓN CON CONTRASEÑA (NUEVO)
+# --------------------------
+CONTRASEÑA_APP = st.secrets.get("CONTRASEÑA_APP", "tu_contraseña_segura_aqui")
+
+def verificar_acceso():
+    if "autenticado" not in st.session_state:
+        st.session_state.autenticado = False
+    
+    if not st.session_state.autenticado:
+        st.title("🔒 Acceso restringido")
+        st.info("Esta aplicación es privada. Ingresa la contraseña para continuar.")
+        clave = st.text_input("Contraseña", type="password")
+        if st.button("🔑 Entrar"):
+            if clave == CONTRASEÑA_APP:
+                st.session_state.autenticado = True
+                st.rerun()
+            else:
+                st.error("❌ Contraseña incorrecta")
+        st.stop()
+
+# Ejecutar verificación antes de mostrar nada
+verificar_acceso()
+
+# --------------------------
 # CONFIGURACIÓN COMPATIBLE CON TODOS LOS NAVEGADORES MÓVILES
 # --------------------------
 st.set_page_config(
@@ -55,11 +79,10 @@ img, .stDataFrame, .stTable {
 """, unsafe_allow_html=True)
 
 # --------------------------
-# CONEXIÓN GROQ Y AIRTABLE (NUEVO)
+# CONEXIÓN GROQ Y AIRTABLE
 # --------------------------
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# Conexión a Airtable
 try:
     AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY")
     AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID")
@@ -75,7 +98,7 @@ except Exception:
     CONECTADO_AIRTABLE = False
 
 # --------------------------
-# BASE DE DATOS: LECTURA Y GUARDADO EN AIRTABLE (NUEVO)
+# BASE DE DATOS: LECTURA Y GUARDADO EN AIRTABLE
 # --------------------------
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
@@ -117,7 +140,7 @@ def guardar_en_base_datos(nuevos_registros):
         st.error(f"❌ Error al guardar en Airtable: {str(e)}")
 
 # --------------------------
-# PROCESAMIENTO DE IMAGEN (INTACTO)
+# PROCESAMIENTO DE IMAGEN
 # --------------------------
 def reducir_imagen(imagen_pil, max_ancho=350):
     if imagen_pil.mode in ("RGBA", "P"):
@@ -136,7 +159,7 @@ def reducir_imagen(imagen_pil, max_ancho=350):
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 # --------------------------
-# EXTRACCIÓN JSON (INTACTA)
+# EXTRACCIÓN JSON
 # --------------------------
 def extraer_json(texto):
     coincidencia = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
@@ -145,7 +168,7 @@ def extraer_json(texto):
     raise ValueError("Formato no válido")
 
 # --------------------------
-# ANÁLISIS (MONEDA EN GBP, INTACTO)
+# ANÁLISIS (MONEDA EN GBP)
 # --------------------------
 def analizar_varias_en_una(imagen, img_b64):
     respuesta = client.chat.completions.create(
@@ -173,7 +196,7 @@ Usa 'Desconocido' si falta dato.
         ]
 
 # --------------------------
-# TRANSCRIPCIÓN (INTACTA)
+# TRANSCRIPCIÓN
 # --------------------------
 def transcribir_a_texto(audio_bytes):
     with open("temp_audio.wav", "wb") as f:
@@ -188,11 +211,10 @@ def transcribir_a_texto(audio_bytes):
     return transcripcion
 
 # --------------------------
-# INICIO (INTACTO)
+# INICIO DE LA APLICACIÓN
 # --------------------------
 st.title("📮 Asistente de Estampillas")
 
-# Estado de conexión a Airtable
 if CONECTADO_AIRTABLE:
     st.success("✅ Conectado correctamente a Airtable")
 else:
@@ -234,7 +256,7 @@ else:
             st.rerun()
 
 # --------------------------
-# PROCESAMIENTO Y GUARDADO EN AIRTABLE (INTACTO EN FUNCIONES)
+# PROCESAMIENTO Y GUARDADO
 # --------------------------
 if archivos_procesar:
     nuevos_registros = []
@@ -278,7 +300,7 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)} en Airtable")
 
 # --------------------------
-# CATÁLOGO (INTACTO)
+# CATÁLOGO
 # --------------------------
 st.header("📚 Catálogo guardado")
 if st.button("📋 Ver / Ocultar catálogo"):
@@ -301,7 +323,7 @@ if st.session_state.ver_catalogo:
         st.info("Sin estampillas guardadas")
 
 # --------------------------
-# CONSULTAS (INTACTAS)
+# CONSULTAS
 # --------------------------
 st.header("💬 Consultas")
 modo_entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
@@ -327,7 +349,7 @@ if st.button("Enviar consulta") and pregunta:
         st.write(respuesta.choices[0].message.content)
 
 # --------------------------
-# COMPRADORES (INTACTOS)
+# COMPRADORES
 # --------------------------
 st.header("🌍 Datos de posibles compradores (todos los tipos)")
 if st.button("🔍 Ver lista completa de contactos"):
@@ -447,7 +469,7 @@ if st.button("🔍 Ver lista completa de contactos"):
         """)
 
 # --------------------------
-# DESCARGA (INTACTA)
+# DESCARGA
 # --------------------------
 st.download_button(
     label="📥 Descargar CSV",
