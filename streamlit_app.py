@@ -10,21 +10,22 @@ import pandas as pd
 from datetime import datetime
 from pyairtable import Api
 
-# 🔒 CONTRASEÑA
+# 🔒 CONTRASEÑA DE ACCESO
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
     st.title("🔒 Acceso restringido")
+    st.info("Aplicación privada: ingresa la contraseña para continuar.")
     clave = st.text_input("Contraseña", type="password")
-    if clave == "AhoraNorbury2026":
+    if clave == "PON_TU_CONTRASEÑA_AQUI":
         st.session_state.autenticado = True
         st.rerun()
     elif clave:
-        st.error("Contraseña incorrecta")
+        st.error("❌ Contraseña incorrecta")
     st.stop()
 
-# CONFIGURACIÓN
+# CONFIGURACIÓN GENERAL
 st.set_page_config(
     page_title="Asistente Estampillas",
     layout="wide",
@@ -46,7 +47,7 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# CONEXIONES
+# CONEXIONES A SERVICIOS
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 CONECTADO_AIRTABLE = False
 try:
@@ -56,7 +57,7 @@ try:
 except Exception:
     pass
 
-# BASE DE DATOS
+# GESTIÓN DE BASE DE DATOS
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
         return pd.DataFrame(columns=["id","fecha","pais","anio","valor_facial","estado","precio_venta","descripcion","imagen_b64"])
@@ -73,7 +74,7 @@ def guardar_en_base_datos(regs):
     if CONECTADO_AIRTABLE:
         for r in regs: tabla_airtable.create(r)
 
-# PROCESAMIENTO
+# FUNCIONES DE PROCESAMIENTO
 def reducir_imagen(img):
     if img.mode in ("RGBA","P"):
         fondo = Image.new("RGB", img.size, (255,255,255))
@@ -110,7 +111,7 @@ def transcribir_audio(audio):
     os.remove("temp.wav")
     return t
 
-# INTERFAZ
+# INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
 if CONECTADO_AIRTABLE: st.success("✅ Conectado a Airtable")
 
@@ -118,6 +119,7 @@ df = cargar_base_datos()
 if "activar_camara" not in st.session_state: st.session_state.activar_camara = False
 if "ver_catalogo" not in st.session_state: st.session_state.ver_catalogo = False
 
+# CARGA Y ANÁLISIS DE ESTAMPILLAS
 st.header("📤 Cargar o tomar estampillas")
 modo = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
 archivos = []
@@ -155,8 +157,9 @@ if archivos:
         df = pd.concat([df, pd.DataFrame(nuevos)], ignore_index=True)
         st.success(f"📦 Guardadas: {len(nuevos)}")
 
-st.header("📚 Catálogo")
-if st.button("📋 Ver / Ocultar"): st.session_state.ver_catalogo = not st.session_state.ver_catalogo
+# CATÁLOGO GUARDADO
+st.header("📚 Catálogo guardado")
+if st.button("📋 Ver / Ocultar catálogo"): st.session_state.ver_catalogo = not st.session_state.ver_catalogo
 if st.session_state.ver_catalogo and not df.empty:
     m = df.copy()
     m["precio_venta"] = m["precio_venta"].apply(lambda x: f"£{x:.2f} GBP")
@@ -164,7 +167,35 @@ if st.session_state.ver_catalogo and not df.empty:
     st.dataframe(m[["id","fecha","pais","anio","precio_venta","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-st.header("💬 Consultas")
+# 🔍 BUSCAR TODOS LOS COMPRADORES EN TIEMPO REAL
+st.header("🌍 Buscar compradores y contactos")
+st.info("Al pulsar se buscará información actualizada: tiendas, páginas web, plataformas, subastas, personas naturales, coleccionistas, redes sociales y asociaciones.")
+
+if st.button("🔍 Buscar ahora"):
+    if df.empty:
+        st.warning("Primero carga y guarda al menos una estampilla.")
+    else:
+        with st.spinner("Buscando todos los contactos vigentes..."):
+            resp = client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
+                messages=[{"role":"user","content":"""
+Busca la información más actualizada disponible en este momento, INCLUYE ABSOLUTAMENTE TODO:
+- Tiendas físicas y en línea especializadas
+- Páginas web, portales y plataformas de compraventa
+- Casas de subastas nacionales e internacionales
+- Personas naturales, coleccionistas particulares y compradores individuales
+- Redes sociales, grupos, foros, comunidades y asociaciones filatélicas
+- Datos de contacto, enlaces oficiales, ubicaciones y referencias vigentes
+NO uses listas fijas ni datos predefinidos: genera todo nuevo desde la información actual. Usa precios en Libras Esterlinas (£).
+"""}],
+                temperature=0.7,
+                max_tokens=1800
+            )
+            st.success("✅ Resultados completos y actualizados:")
+            st.markdown(resp.choices[0].message.content)
+
+# CONSULTAS GENERALES
+st.header("💬 Otras consultas")
 entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
 pregunta = ""
 if entrada == "✍️ Texto":
@@ -173,16 +204,17 @@ else:
     audio = st.audio_input("Graba tu mensaje")
     if audio: pregunta = transcribir_audio(audio); st.write(f"📝: {pregunta}")
 
-if st.button("Enviar") and pregunta:
-    with st.spinner("Buscando información actualizada..."):
+if st.button("Enviar consulta") and pregunta:
+    with st.spinner("Procesando..."):
         resp = client.chat.completions.create(
             model="qwen/qwen3.6-27b",
-            messages=[{"role":"user","content":f"Responde sobre estampillas: {pregunta}. Si pides compradores, tiendas o sitios, genera la información más actual disponible en el momento, sin listas fijas. Precios en GBP."}],
-            temperature=0.7, max_tokens=1200
+            messages=[{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}],
+            temperature=0.7, max_tokens=600
         )
         st.success("✅ Respuesta:")
         st.write(resp.choices[0].message.content)
 
+# DESCARGA DE DATOS
 st.download_button("📥 Descargar CSV",
     data=df.drop(columns=["imagen_b64"]).to_csv(index=False).encode("utf-8"),
     file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv")
