@@ -70,7 +70,6 @@ def cargar_base_datos():
     except Exception:
         return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","image_b64"])
 
-# ✅ FECHA ARREGLADA Y NOMBRE DE COLUMNA COINCIDENTE
 def guardar_en_base_datos(regs):
     if not CONECTADO_AIRTABLE:
         st.warning("⚠️ No hay conexión con Airtable, no se guardó.")
@@ -112,7 +111,6 @@ def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
     return json.loads(m.group()) if m else None
 
-# ✅ DETECCIÓN MEJORADA: SIN DATOS FALSOS POR DEFECTO
 def analizar_estampa(img, b64):
     resp = client.chat.completions.create(
         model="qwen/qwen3.6-27b",
@@ -175,14 +173,22 @@ if archivos:
             estampas = analizar_estampa(img, b64)
             st.success(f"✅ {len(estampas)} estampillas detectadas:")
             for n, d in enumerate(estampas,1):
+                # ✅ SOLO AQUÍ SE CORRIGIÓ LA LECTURA DE DATOS
+                pais = d.get("country") or d.get("Country") or "Desconocido"
+                anio = d.get("year") or d.get("Year") or "Desconocido"
+                valor = d.get("face_value") or d.get("Face_value") or "Desconocido"
+                estado = d.get("condition") or d.get("Condition") or "Desconocido"
+                precio = d.get("sale_price_gbp") or d.get("Sale_price_gbp") or 0
+                desc = d.get("description") or d.get("Description") or "Sin detalles"
+
                 st.markdown(f"""
 **Estampilla {n}**
-- 📍 País: {d.get('country','Desconocido')}
-- 📅 Año: {d.get('year','Desconocido')}
-- 💷 Valor facial: {d.get('face_value','Desconocido')}
-- 📋 Estado: {d.get('condition','Desconocido')}
-- 💰 Precio venta: £{d.get('sale_price_gbp',0):.2f} GBP
-- 📝 Descripción: {d.get('description','Sin detalles')}
+- 📍 País: {pais}
+- 📅 Año: {anio}
+- 💷 Valor facial: {valor}
+- 📋 Estado: {estado}
+- 💰 Precio venta: £{precio:.2f} GBP
+- 📝 Descripción: {desc}
                 """)
                 guardar = st.checkbox(f"📦 Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
                 if guardar:
@@ -209,7 +215,7 @@ if st.session_state.ver_catalogo and not df.empty:
     st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# ✅ BÚSQUEDA ESPECÍFICA: INDICA EXACTAMENTE A QUIEN LE VENDES
+# BUSCAR COMPRADORES
 st.header("🌍 Buscar compradores y contactos")
 st.info("Al pulsar se muestra exactamente quién compra en cada sitio, sin términos vagos.")
 
