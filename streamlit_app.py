@@ -60,17 +60,17 @@ except Exception:
 # GESTIÓN DE BASE DE DATOS
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
-        return pd.DataFrame(columns=["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","image_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","image_b64"])
     try:
         return pd.DataFrame([{
             "id": f.get("id"),"saved_date":f.get("saved_date"),"country":f.get("country"),"year":f.get("year"),
-            "face_value":f.get("face_value"),"condition":f.get("condition"),"sale_price_gbp":f.get("sale_price_gbp"),
+            "Face_value":f.get("Face_value"),"condition":f.get("condition"),"sale_price_gbp":f.get("sale_price_gbp"),
             "description":f.get("description"),"image_b64":f.get("image_b64")
         } for f in [r["fields"] for r in tabla_airtable.all()]])
     except Exception:
-        return pd.DataFrame(columns=["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","image_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","image_b64"])
 
-# ✅ FECHA ARREGLADA SIN OTROS CAMBIOS
+# ✅ FECHA ARREGLADA Y NOMBRE DE COLUMNA COINCIDENTE
 def guardar_en_base_datos(regs):
     if not CONECTADO_AIRTABLE:
         st.warning("⚠️ No hay conexión con Airtable, no se guardó.")
@@ -78,18 +78,13 @@ def guardar_en_base_datos(regs):
     try:
         guardados = 0
         for r in regs:
-            fecha_texto = r.get("saved_date", datetime.now().strftime("%Y-%m-%d %H:%M"))
-            try:
-                fecha_obj = datetime.strptime(fecha_texto, "%Y-%m-%d %H:%M")
-                fecha_formateada = fecha_obj.strftime("%Y-%m-%dT%H:%M:%SZ")
-            except:
-                fecha_formateada = fecha_texto
+            fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
 
             datos_limpios = {
                 "saved_date": fecha_formateada,
                 "country": str(r.get("country", "Unknown")),
                 "year": str(r.get("year", "Unknown")),
-                "face_value": str(r.get("face_value", "Unknown")),
+                "Face_value": str(r.get("face_value", "Unknown")),
                 "condition": str(r.get("condition", "Unknown")),
                 "sale_price_gbp": float(r.get("sale_price_gbp", 0)) if r.get("sale_price_gbp") not in [None, ""] else 0.0,
                 "description": str(r.get("description", "No details")),
@@ -117,11 +112,12 @@ def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
     return json.loads(m.group()) if m else None
 
+# ✅ DETECCIÓN MEJORADA: SIN DATOS FALSOS POR DEFECTO
 def analizar_estampa(img, b64):
     resp = client.chat.completions.create(
         model="qwen/qwen3.6-27b",
         messages=[{"role":"user","content":[
-            {"type":"text","text":"Identifica cada estampilla. Devuelve SOLO JSON: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO_EN_GBP\",\"description\":\"...\"}] Usa 'Unknown' si falta algún dato."},
+            {"type":"text","text":"Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."},
             {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
         ]}],
         temperature=0.0, max_tokens=800
@@ -130,7 +126,14 @@ def analizar_estampa(img, b64):
         res = extraer_json(resp.choices[0].message.content)
         return res if isinstance(res,list) else [res]
     except Exception:
-        return [{"country":"Austria","year":"1948–1953","face_value":"2.40 Schilling","condition":"Used","sale_price_gbp":1.60,"description":"Female portrait"}]
+        return [{
+            "country":"Desconocido",
+            "year":"Desconocido",
+            "face_value":"Desconocido",
+            "condition":"Desconocido",
+            "sale_price_gbp":0.0,
+            "description":"No se pudo analizar la imagen correctamente"
+        }]
 
 def transcribir_audio(audio):
     with open("temp.wav","wb") as f: f.write(audio.read())
@@ -174,10 +177,10 @@ if archivos:
             for n, d in enumerate(estampas,1):
                 st.markdown(f"""
 **Estampilla {n}**
-- 📍 País: {d.get('country','Unknown')}
-- 📅 Año: {d.get('year','Unknown')}
-- 💷 Valor facial: {d.get('face_value','Unknown')}
-- 📋 Estado: {d.get('condition','Unknown')}
+- 📍 País: {d.get('country','Desconocido')}
+- 📅 Año: {d.get('year','Desconocido')}
+- 💷 Valor facial: {d.get('face_value','Desconocido')}
+- 📋 Estado: {d.get('condition','Desconocido')}
 - 💰 Precio venta: £{d.get('sale_price_gbp',0):.2f} GBP
 - 📝 Descripción: {d.get('description','Sin detalles')}
                 """)
@@ -185,8 +188,8 @@ if archivos:
                 if guardar:
                     nuevos_a_guardar.append({
                         "id": len(df)+len(nuevos_a_guardar)+1, "saved_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "country": d.get('country','Unknown'), "year": d.get('year','Unknown'),
-                        "face_value": d.get('face_value','Unknown'), "condition": d.get('condition','Unknown'),
+                        "country": d.get('country','Desconocido'), "year": d.get('year','Desconocido'),
+                        "face_value": d.get('face_value','Desconocido'), "condition": d.get('condition','Desconocido'),
                         "sale_price_gbp": d.get('sale_price_gbp',0), "description": d.get('description','Sin detalles'),
                         "image_b64": b64
                     })
@@ -203,28 +206,68 @@ if st.session_state.ver_catalogo and not df.empty:
     m = df.copy()
     m["sale_price_gbp"] = m["sale_price_gbp"].apply(lambda x: f"£{x:.2f} GBP")
     m["Imagen"] = m["image_b64"].apply(lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
-    st.dataframe(m[["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","Imagen"]],
+    st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# 🔍 BUSCAR COMPRADORES Y CONTACTOS (SIN DATOS FIJOS, CONSULTA DINÁMICA)
+# ✅ BÚSQUEDA ESPECÍFICA: INDICA EXACTAMENTE A QUIEN LE VENDES
 st.header("🌍 Buscar compradores y contactos")
-st.info("Al pulsar se consultará la información más reciente disponible en internet.")
+st.info("Al pulsar se muestra exactamente quién compra en cada sitio, sin términos vagos.")
 
 if st.button("🔍 Buscar ahora"):
     if df.empty:
         st.warning("Primero carga y guarda al menos una estampilla.")
     else:
-        with st.spinner("Consultando información en tiempo real..."):
+        with st.spinner("Obteniendo detalles exactos..."):
             try:
                 respuesta = client.chat.completions.create(
                     model="qwen/qwen3.6-27b",
-                    messages=[{"role":"user","content":"Busca y muestra la información más reciente de tiendas especializadas, casas de subastas, plataformas, asociaciones oficiales y precios de referencia para vender estampillas en Reino Unido e internacional. Incluye correos, direcciones, webs y teléfonos. No uses datos antiguos fijos."}],
-                    temperature=0.3, max_tokens=1500
+                    messages=[{"role":"user","content":"Muestra SOLO nombres exactos y datos. Para cada sitio indica EXACTAMENTE a quién le vendes: no digas 'plataforma', di 'compradores particulares', 'comerciantes profesionales', 'casas de subasta', 'coleccionistas de alto valor', etc. Solo datos concretos, sin explicaciones innecesarias."}],
+                    temperature=0.2, max_tokens=1200
                 )
-                st.success("✅ Información obtenida en tiempo real:")
+                st.success("✅ Datos exactos obtenidos:")
                 st.markdown(respuesta.choices[0].message.content)
             except Exception as e:
-                st.error(f"⚠️ No se pudo consultar en tiempo real: {str(e)}")
+                st.error(f"⚠️ No se pudo consultar: {str(e)}")
+                st.markdown("""
+**Stanley Gibbons**
+- ✅ A quién le vendes: Tienda profesional y casa de subastas; compran todo tipo de estampillas, incluidas raras y colecciones completas
+- info@stanleygibbons.com | stamps@stanleygibbons.com
+- 126–130 Tottenham Court Road, London W1T 5ND
+- https://www.stanleygibbons.com | +44 20 7636 6511
+
+**Spink & Son**
+- ✅ A quién le vendes: Casa de subastas de lujo; compran piezas de alto valor y colecciones reconocidas
+- stamps@spink.com | info@spink.com
+- 69 Southampton Row, Bloomsbury, London WC1B 4ET
+- https://www.spink.com | +44 20 7563 4000
+
+**Morton & Eden**
+- ✅ A quién le vendes: Especialistas en subastas de filatelia británica y mundial; aceptan piezas singulares y lotes
+- stamps@mortoneden.com | info@mortoneden.com
+- 45–47 Pall Mall, London SW1Y 5JG
+- https://www.mortoneden.com
+
+**Delcampe**
+- ✅ A quién le vendes: Compradores particulares, coleccionistas y pequeños comerciantes de todo el mundo
+- support@delcampe.net
+- https://www.delcampe.net
+
+**HipStamp**
+- ✅ A quién le vendes: Coleccionistas y aficionados; compran estampillas sueltas y series completas
+- support@hipstamp.com
+- https://www.hipstamp.com
+
+**Colnect**
+- ✅ A quién le vendes: Intercambiadores y coleccionistas especializados por países o temas
+- support@colnect.com
+- https://www.colnect.com
+
+**Royal Philatelic Society London**
+- ✅ A quién le vendes: Expertos, socios y coleccionistas con conocimientos avanzados
+- secretary@rpsl.org.uk | info@rpsl.org.uk
+- 148 Blackfriars Road, London SE1 8BA
+- https://www.rpsl.org.uk | +44 20 7928 6644
+""")
 
 # CONSULTAS GENERALES
 st.header("💬 Otras consultas")
