@@ -18,7 +18,7 @@ if not st.session_state.autenticado:
     st.title("🔒 Acceso restringido")
     st.info("Aplicación privada: ingresa la contraseña para continuar.")
     clave = st.text_input("Contraseña", type="password")
-    if clave == "PON_TU_CONTRASEÑA_AQUI":
+    if clave == "AhoraNorbury2026":
         st.session_state.autenticado = True
         st.rerun()
     elif clave:
