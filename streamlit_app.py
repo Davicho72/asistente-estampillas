@@ -57,18 +57,18 @@ try:
 except Exception:
     pass
 
-# GESTIÓN DE BASE DE DATOS
+# GESTIÓN DE BASE DE DATOS (COLUMNAS EN INGLÉS)
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
-        return pd.DataFrame(columns=["id","fecha","pais","anio","valor_facial","estado","precio_venta","descripcion","imagen_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","image_b64"])
     try:
         return pd.DataFrame([{
-            "id": f.get("id"),"fecha":f.get("fecha"),"pais":f.get("pais"),"anio":f.get("anio"),
-            "valor_facial":f.get("valor_facial"),"estado":f.get("estado"),"precio_venta":f.get("precio_venta"),
-            "descripcion":f.get("descripcion"),"imagen_b64":f.get("imagen_b64")
+            "id": f.get("id"),"saved_date":f.get("saved_date"),"country":f.get("country"),"year":f.get("year"),
+            "face_value":f.get("face_value"),"condition":f.get("condition"),"sale_price_gbp":f.get("sale_price_gbp"),
+            "description":f.get("description"),"image_b64":f.get("image_b64")
         } for f in [r["fields"] for r in tabla_airtable.all()]])
     except Exception:
-        return pd.DataFrame(columns=["id","fecha","pais","anio","valor_facial","estado","precio_venta","descripcion","imagen_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","image_b64"])
 
 def guardar_en_base_datos(regs):
     if CONECTADO_AIRTABLE:
@@ -93,7 +93,7 @@ def analizar_estampa(img, b64):
     resp = client.chat.completions.create(
         model="qwen/qwen3.6-27b",
         messages=[{"role":"user","content":[
-            {"type":"text","text":"Identifica cada estampilla. Devuelve SOLO JSON: [{\"pais\":\"...\",\"anio\":\"...\",\"valor_facial\":\"...\",\"estado\":\"...\",\"precio_venta\":\"NUMERO_EN_GBP\",\"descripcion\":\"...\"}] Usa 'Desconocido' si falta algún dato."},
+            {"type":"text","text":"Identifica cada estampilla. Devuelve SOLO JSON: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO_EN_GBP\",\"description\":\"...\"}] Usa 'Unknown' si falta algún dato."},
             {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
         ]}],
         temperature=0.0, max_tokens=800
@@ -102,7 +102,7 @@ def analizar_estampa(img, b64):
         res = extraer_json(resp.choices[0].message.content)
         return res if isinstance(res,list) else [res]
     except Exception:
-        return [{"pais":"Austria","anio":"1948–1953","valor_facial":"2,40 Schilling","estado":"Usada","precio_venta":1.60,"descripcion":"Retrato femenino"}]
+        return [{"country":"Austria","year":"1948–1953","face_value":"2.40 Schilling","condition":"Used","sale_price_gbp":1.60,"description":"Female portrait"}]
 
 def transcribir_audio(audio):
     with open("temp.wav","wb") as f: f.write(audio.read())
@@ -113,7 +113,7 @@ def transcribir_audio(audio):
 
 # INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
-if CONECTADO_AIRTABLE: st.success("✅ Conectado a Airtable")
+if CONECTADO_AIRTABLE: st.success("✅ Conectado correctamente a Airtable")
 
 df = cargar_base_datos()
 if "activar_camara" not in st.session_state: st.session_state.activar_camara = False
@@ -146,39 +146,39 @@ if archivos:
             for n, d in enumerate(estampas,1):
                 st.markdown(f"""
 **Estampilla {n}**
-- 📍 País: {d.get('pais','Desconocido')}
-- 📅 Año: {d.get('anio','Desconocido')}
-- 💷 Valor facial: {d.get('valor_facial','Desconocido')}
-- 📋 Estado: {d.get('estado','Desconocido')}
-- 💰 Precio venta: £{d.get('precio_venta',0):.2f} GBP
-- 📝 Descripción: {d.get('descripcion','Sin detalles')}
+- 📍 País: {d.get('country','Unknown')}
+- 📅 Año: {d.get('year','Unknown')}
+- 💷 Valor facial: {d.get('face_value','Unknown')}
+- 📋 Estado: {d.get('condition','Unknown')}
+- 💰 Precio venta: £{d.get('sale_price_gbp',0):.2f} GBP
+- 📝 Descripción: {d.get('description','Sin detalles')}
                 """)
-                # ✅ OPCIÓN DE ELEGIR: GUARDAR O NO
-                guardar = st.checkbox(f"📦 Guardar esta estampilla en la base de datos", value=True, key=f"guardar_{i}_{n}")
+                # ✅ Opción de guardar o no
+                guardar = st.checkbox(f"📦 Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
                 if guardar:
                     nuevos_a_guardar.append({
-                        "id": len(df)+len(nuevos_a_guardar)+1, "fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "pais": d.get("pais","Desconocido"), "anio": d.get("anio","Desconocido"),
-                        "valor_facial": d.get("valor_facial","Desconocido"), "estado": d.get("estado","Desconocido"),
-                        "precio_venta": d.get("precio_venta",0), "descripcion": d.get("descripcion","Sin detalles"),
-                        "imagen_b64": b64
+                        "id": len(df)+len(nuevos_a_guardar)+1, "saved_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "country": d.get('country','Unknown'), "year": d.get('year','Unknown'),
+                        "face_value": d.get('face_value','Unknown'), "condition": d.get('condition','Unknown'),
+                        "sale_price_gbp": d.get('sale_price_gbp',0), "description": d.get('description','Sin detalles'),
+                        "image_b64": b64
                     })
-    # GUARDA SOLO LAS QUE MARCASTE
+    # GUARDA SOLO LAS SELECCIONADAS
     if nuevos_a_guardar:
         guardar_en_base_datos(nuevos_a_guardar)
         df = pd.concat([df, pd.DataFrame(nuevos_a_guardar)], ignore_index=True)
-        st.success(f"📦 Guardadas: {len(nuevos_a_guardar)} en Airtable")
+        st.success(f"📦 Guardadas correctamente: {len(nuevos_a_guardar)} estampillas")
     elif archivos:
-        st.info("ℹ️ No se guardó ninguna estampilla: desmarcaste todas las opciones.")
+        st.info("ℹ️ No se guardó ninguna: desmarcaste todas las opciones.")
 
 # CATÁLOGO GUARDADO
 st.header("📚 Catálogo guardado")
 if st.button("📋 Ver / Ocultar catálogo"): st.session_state.ver_catalogo = not st.session_state.ver_catalogo
 if st.session_state.ver_catalogo and not df.empty:
     m = df.copy()
-    m["precio_venta"] = m["precio_venta"].apply(lambda x: f"£{x:.2f} GBP")
-    m["Imagen"] = m["imagen_b64"].apply(lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
-    st.dataframe(m[["id","fecha","pais","anio","valor_facial","estado","precio_venta","descripcion","Imagen"]],
+    m["sale_price_gbp"] = m["sale_price_gbp"].apply(lambda x: f"£{x:.2f} GBP")
+    m["Imagen"] = m["image_b64"].apply(lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
+    st.dataframe(m[["id","saved_date","country","year","face_value","condition","sale_price_gbp","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
 # 🔍 BUSCAR COMPRADORES: FORMATO ORDENADO
@@ -291,5 +291,5 @@ if st.button("Enviar consulta") and pregunta:
 
 # DESCARGA DE DATOS
 st.download_button("📥 Descargar CSV",
-    data=df.drop(columns=["imagen_b64"]).to_csv(index=False).encode("utf-8"),
+    data=df.drop(columns=["image_b64"]).to_csv(index=False).encode("utf-8"),
     file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv")
