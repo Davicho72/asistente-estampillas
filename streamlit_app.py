@@ -10,7 +10,7 @@ import pandas as pd
 from datetime import datetime
 
 # --------------------------
-# CONFIGURACIÓN OPTIMIZADA PARA MÓVIL
+# CONFIGURACIÓN COMPATIBLE CON TODOS LOS NAVEGADORES MÓVILES
 # --------------------------
 st.set_page_config(
     page_title="Asistente Estampillas",
@@ -19,34 +19,37 @@ st.set_page_config(
     menu_items={"About": "Asistente de análisis de estampillas"}
 )
 
-# ESTILOS ADAPTADOS A PANTALLAS PEQUEÑAS
+# AJUSTES OBLIGATORIOS PARA CHROME EN TELÉFONO
 st.markdown("""
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:;">
 <style>
-/* Ajustes generales para móvil */
-html, body, [class*="css"] {
-    font-size: 16px !important;
+html, body, .stApp {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    margin: 0 !important;
+    padding: 0.5rem !important;
 }
+* {box-sizing: border-box !important;}
 .stButton>button {
+    width: 100% !important;
     min-height: 48px !important;
     font-size: 16px !important;
-    width: 100% !important;
+    margin: 0.4rem 0 !important;
 }
-[data-testid="stFileUploader"] {
+.stFileUploader, .stCameraInput, .stTextArea {
+    width: 100% !important;
     font-size: 15px !important;
 }
 h1 {font-size: 22px !important;}
 h2 {font-size: 20px !important;}
 h3 {font-size: 18px !important;}
-/* Imágenes y tablas se adaptan */
 img, .stDataFrame, .stTable {
     max-width: 100% !important;
     height: auto !important;
 }
-/* Quita desplazamiento horizontal */
-section.main {
-    overflow-x: hidden !important;
-    padding: 1rem 0.5rem !important;
-}
+[data-testid="stSidebar"] {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -71,7 +74,7 @@ def guardar_en_base_datos(df):
     df.to_csv(ARCHIVO_DATOS, index=False)
 
 # --------------------------
-# PROCESAMIENTO DE IMAGEN (ADAPTADO)
+# PROCESAMIENTO DE IMAGEN (INTACTO)
 # --------------------------
 def reducir_imagen(imagen_pil, max_ancho=350):
     if imagen_pil.mode in ("RGBA", "P"):
@@ -99,7 +102,7 @@ def extraer_json(texto):
     raise ValueError("Formato no válido")
 
 # --------------------------
-# ANÁLISIS (INTACTO, MONEDA EN GBP)
+# ANÁLISIS (MONEDA EN GBP, INTACTO)
 # --------------------------
 def analizar_varias_en_una(imagen, img_b64):
     respuesta = client.chat.completions.create(
@@ -225,7 +228,7 @@ if archivos_procesar:
         st.success(f"📦 Guardadas: {len(nuevos_registros)}")
 
 # --------------------------
-# CATÁLOGO (ADAPTADO)
+# CATÁLOGO (INTACTO)
 # --------------------------
 st.header("📚 Catálogo guardado")
 if st.button("📋 Ver / Ocultar catálogo"):
