@@ -43,7 +43,7 @@ img, .stDataFrame {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🔧 API SOLAR (UPSTAGE) — SOLO SE CAMBIÓ ESTA PARTE
+# 🔧 API SOLAR (UPSTAGE)
 UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
 UPSTAGE_URL = "https://api.upstage.ai/v1/solar/chat/completions"
 UPSTAGE_MODEL = "solar-vision-1.5-preview"
@@ -68,7 +68,7 @@ def llamar_solar(mensajes, temperatura=0.0, max_tokens=800):
     except Exception as e:
         return f"AI Error: {str(e)}"
 
-# FUNCIÓN PARA ANALIZAR IMAGEN (USA SOLAR, MISMA LÓGICA DE ANTES)
+# FUNCIÓN PARA ANALIZAR IMAGEN
 def analizar_imagen_estampa(b64_imagen):
     if not UPSTAGE_API_KEY:
         return [{"country":"Unknown","year":"Unknown","face_value":"Unknown","condition":"Unknown","sale_price_gbp":0.0,"description":"Set UPSTAGE_API_KEY in Secrets"}]
@@ -91,7 +91,7 @@ def analizar_imagen_estampa(b64_imagen):
     except Exception as e:
         return [{"country":"Unknown","year":"Unknown","face_value":"Unknown","condition":"Unknown","sale_price_gbp":0.0,"description":f"Error: {str(e)}"}]
 
-# 🔧 EBAY UK — EXACTAMENTE IGUAL
+# 🔧 EBAY UK
 EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
 EBAY_CERT_ID = os.getenv("EBAY_CERT_ID", "")
 EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
@@ -145,7 +145,7 @@ Fast secure shipping from United Kingdom."""
     except Exception as e:
         return False, str(e)
 
-# AIRTABLE — EXACTAMENTE IGUAL
+# AIRTABLE
 CONECTADO_AIRTABLE = False
 try:
     api_airtable = Api(os.getenv("AIRTABLE_API_KEY"))
@@ -162,7 +162,14 @@ def publicar_desde_airtable():
     for r in regs:
         f = r["fields"]
         if not bool(f.get(CAMPO_PUBLICAR,False)): skip+=1; continue
-        d = {"country":f.get("country","Unknown"),"year":f.get("year",""),"face_value":f.get("Face_value",""),"condition":f.get("condition",""),"sale_price_gbp":float(f.get("sale_price_gbp",0))or0,"description":f.get("description","")}
+        d = {
+            "country": f.get("country","Unknown"),
+            "year": f.get("year",""),
+            "face_value": f.get("Face_value",""),
+            "condition": f.get("condition",""),
+            "sale_price_gbp": float(f.get("sale_price_gbp",0)) or 0,
+            "description": f.get("description","")
+        }
         ok,res = publicar_en_ebay(d)
         if ok: st.success(f"✅ Published: {res}"); tabla_airtable.update(r["id"],{CAMPO_PUBLICAR:False,"eBay ID":res}); pub+=1
         else: st.warning(f"Record {r['id']}: {res}")
@@ -170,7 +177,11 @@ def publicar_desde_airtable():
 
 def cargar_base():
     if not CONECTADO_AIRTABLE: return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","List on eBay","image_b64"])
-    return pd.DataFrame([{"id":f.get("id"),"saved_date":f.get("saved_date"),"country":f.get("country"),"year":f.get("year"),"Face_value":f.get("Face_value"),"condition":f.get("condition"),"sale_price_gbp":f.get("sale_price_gbp"),"description":f.get("description"),"List on eBay":bool(f.get("List on eBay",False)),"image_b64":f.get("image_b64")} for f in [x["fields"] for x in tabla_airtable.all()]])
+    return pd.DataFrame([{
+        "id":f.get("id"),"saved_date":f.get("saved_date"),"country":f.get("country"),"year":f.get("year"),
+        "Face_value":f.get("Face_value"),"condition":f.get("condition"),"sale_price_gbp":f.get("sale_price_gbp"),
+        "description":f.get("description"),"List on eBay":bool(f.get("List on eBay",False)),"image_b64":f.get("image_b64")
+    } for f in [x["fields"] for x in tabla_airtable.all()]])
 
 def guardar(regs):
     if not CONECTADO_AIRTABLE: st.warning("Not saved"); return
@@ -186,7 +197,7 @@ def guardar(regs):
         ok+=1
     st.success(f"Saved: {ok}")
 
-# INTERFAZ — EXACTAMENTE IGUAL
+# INTERFAZ
 st.title("📮 Stamp Assistant")
 if CONECTADO_AIRTABLE: st.success("Connected to Airtable")
 
