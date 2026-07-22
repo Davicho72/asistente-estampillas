@@ -57,19 +57,18 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🔧 API SOLAR (UPSTAGE) — CORREGIDA PARA TEXTO E IMÁGENES
-UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
-UPSTAGE_URL = "https://api.upstage.ai/v1/solar/chat/completions"
-UPSTAGE_MODEL = "solar-vision-1.5-preview"
+# 🔧 API MISTRAL (FRANCIA) — SOLO ESTA PARTE CAMBIADA
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
+MISTRAL_MODEL = "pixtral-12b-2409"
 
-def llamar_solar(mensajes, temperatura=0.0, max_tokens=800):
-    if not UPSTAGE_API_KEY:
-        return "ERROR: UPSTAGE_API_KEY no configurada en Secrets"
+def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
+    if not MISTRAL_API_KEY:
+        return "ERROR: MISTRAL_API_KEY no configurada en Secrets"
     cabeceras = {
-        "Authorization": f"Bearer {UPSTAGE_API_KEY}",
+        "Authorization": f"Bearer {MISTRAL_API_KEY}",
         "Content-Type": "application/json"
     }
-    # Ajusta el formato: texto siempre como lista de objetos
     mensajes_formateados = []
     for m in mensajes:
         if isinstance(m["content"], str):
@@ -77,13 +76,13 @@ def llamar_solar(mensajes, temperatura=0.0, max_tokens=800):
         else:
             mensajes_formateados.append(m)
     datos = {
-        "model": UPSTAGE_MODEL,
+        "model": MISTRAL_MODEL,
         "messages": mensajes_formateados,
         "temperature": temperatura,
         "max_tokens": max_tokens
     }
     try:
-        respuesta = requests.post(UPSTAGE_URL, headers=cabeceras, json=datos, timeout=90)
+        respuesta = requests.post(MISTRAL_URL, headers=cabeceras, json=datos, timeout=90)
         if not respuesta.ok:
             return f"ERROR API: {respuesta.status_code} - {respuesta.text[:300]}"
         return respuesta.json()["choices"][0]["message"]["content"]
@@ -172,7 +171,7 @@ try:
 except Exception:
     pass
 
-# 🚀 PUBLICACIÓN DESDE AIRTABLE — ERROR DE SINTAXIS ARREGLADO
+# 🚀 PUBLICACIÓN DESDE AIRTABLE — IGUAL
 def publicar_desde_airtable():
     if not CONECTADO_AIRTABLE:
         st.warning("Sin conexión a Airtable")
@@ -254,7 +253,7 @@ def guardar_en_base_datos(regs):
     except Exception as e:
         st.error(f"Error al guardar: {str(e)}")
 
-# FUNCIONES DE PROCESAMIENTO — IGUAL
+# FUNCIONES DE PROCESAMIENTO — AHORA USAN MISTRAL
 def reducir_imagen(img):
     if img.mode in ("RGBA","P"):
         fondo = Image.new("RGB", img.size, (255,255,255))
@@ -278,7 +277,7 @@ def analizar_estampa(img, b64):
     for intento in range(max_intentos):
         try:
             time.sleep(1.5)
-            respuesta = llamar_solar([{
+            respuesta = llamar_mistral([{
                 "role": "user",
                 "content": [
                     {"type":"text","text":instruccion},
@@ -309,7 +308,7 @@ def transcribir_audio(audio):
     with open("temp.wav","rb") as f:
         arch = base64.b64encode(f.read()).decode("utf-8")
     os.remove("temp.wav")
-    respuesta = llamar_solar([{
+    respuesta = llamar_mistral([{
         "role":"user",
         "content":[{"type":"text","text":"Transcribe exactamente el audio, sin añadir nada más."},{"type":"input_file","input_file":f"data:audio/wav;base64,{arch}"}]
     }])
@@ -419,7 +418,7 @@ if st.button("Buscar ahora"):
     else:
         with st.spinner("Obteniendo datos..."):
             try:
-                respuesta = llamar_solar([{
+                respuesta = llamar_mistral([{
                     "role":"user",
                     "content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos, solo información concreta actualizada al 2026."
                 }], temperatura=0.1, max_tokens=1500)
@@ -442,7 +441,7 @@ else:
 
 if st.button("Enviar consulta") and pregunta:
     with st.spinner("Procesando..."):
-        respuesta = llamar_solar([{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}], temperatura=0.7, max_tokens=600)
+        respuesta = llamar_mistral([{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}], temperatura=0.7, max_tokens=600)
         st.success("Respuesta:")
         st.write(respuesta)
 
