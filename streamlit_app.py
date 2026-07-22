@@ -38,7 +38,6 @@ st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:;">
 
-<!-- 📱 CONFIGURACIÓN PARA TU APP E ICONO PERSONALIZADO -->
 <link rel="icon" type="image/png" href="PON_EL_ENLACE_DE_TU_ICONO_AQUI">
 <link rel="apple-touch-icon" href="PON_EL_ENLACE_DE_TU_ICONO_AQUI">
 <meta name="theme-color" content="#2c3e50">
@@ -57,22 +56,25 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# CONEXIÓN A DOLA (EN LUGAR DE GROQ)
-DOLA_API_KEY = os.getenv("DOLA_API_KEY", "")
-DOLA_API_URL = "https://api.dola.ai/v1/chat/completions"
+# 🔧 CONEXIÓN A OPENROUTER (EN LUGAR DE GROQ)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODELO = "qwen/qwen3.6-vision-instruct:free"  # Modelo gratuito, mismo que usabas
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-def llamar_dola(mensajes, temperatura=0.0, max_tokens=800):
+def llamar_openrouter(mensajes, temperatura=0.0, max_tokens=800):
     cabeceras = {
-        "Authorization": f"Bearer {DOLA_API_KEY}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://localhost:8501",
+        "X-Title": "Asistente Estampillas"
     }
     datos = {
-        "model": "dola-vision",
+        "model": OPENROUTER_MODELO,
         "messages": mensajes,
         "temperature": temperatura,
         "max_tokens": max_tokens
     }
-    respuesta = requests.post(DOLA_API_URL, headers=cabeceras, json=datos, timeout=60)
+    respuesta = requests.post(OPENROUTER_URL, headers=cabeceras, json=datos, timeout=60)
     respuesta.raise_for_status()
     return respuesta.json()["choices"][0]["message"]["content"]
 
@@ -141,12 +143,14 @@ def extraer_json(texto):
 # FUNCIÓN CON PROTECCIÓN CONTRA LÍMITES
 def analizar_estampa(img, b64):
     max_intentos = 3
+    instruccion = "Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. El precio de venta siempre debe expresarse en libras esterlinas (GBP), nunca en otra moneda. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."
+    
     for intento in range(max_intentos):
         try:
-            respuesta = llamar_dola([{
+            respuesta = llamar_openrouter([{
                 "role": "user",
                 "content": [
-                    {"type":"text","text":"Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."},
+                    {"type":"text","text":instruccion},
                     {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
                 ]
             }])
@@ -173,7 +177,7 @@ def transcribir_audio(audio):
     with open("temp.wav","rb") as f:
         arch = base64.b64encode(f.read()).decode("utf-8")
     os.remove("temp.wav")
-    respuesta = llamar_dola([{
+    respuesta = llamar_openrouter([{
         "role":"user",
         "content":[{"type":"text","text":"Transcribe exactamente el audio, sin añadir nada más."},{"type":"input_file","input_file":f"data:audio/wav;base64,{arch}"}]
     }])
@@ -263,7 +267,7 @@ if st.button("🔍 Buscar ahora"):
     else:
         with st.spinner("Obteniendo datos actualizados..."):
             try:
-                respuesta = llamar_dola([{
+                respuesta = llamar_openrouter([{
                     "role":"user",
                     "content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos como 'plataforma', solo información concreta actualizada al 2026."
                 }], temperatura=0.1, max_tokens=1500)
@@ -293,7 +297,7 @@ else:
 
 if st.button("Enviar consulta") and pregunta:
     with st.spinner("Procesando..."):
-        respuesta = llamar_dola([{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}], temperatura=0.7, max_tokens=600)
+        respuesta = llamar_openrouter([{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}], temperatura=0.7, max_tokens=600)
         st.success("✅ Respuesta:")
         st.write(respuesta)
 
