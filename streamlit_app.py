@@ -228,13 +228,16 @@ def cargar_base_datos():
     except Exception:
         return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","image_b64"])
 
-def guardar_en_base_datos(regs):
+def guardar_seleccionadas(lista):
     if not CONECTADO_AIRTABLE:
-        st.warning("No hay conexión con Airtable, no se guardó.")
+        st.warning("No hay conexión con Airtable.")
+        return
+    if not lista:
+        st.info("No hay estampillas marcadas para guardar.")
         return
     try:
         guardados = 0
-        for r in regs:
+        for r in lista:
             fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
             datos_limpios = {
                 "saved_date": fecha_formateada,
@@ -242,16 +245,41 @@ def guardar_en_base_datos(regs):
                 "year": str(r.get("year", "Unknown")),
                 "Face_value": str(r.get("face_value", "Unknown")),
                 "condition": str(r.get("condition", "Unknown")),
-                "sale_price_gbp": float(r.get("sale_price_gbp", 0)) if r.get("sale_price_gbp") not in [None, ""] else 0.0,
+                "sale_price_gbp": float(r.get("sale_price_gbp", 0)),
                 "description": str(r.get("description", "No details")),
                 "Publicar en eBay": bool(r.get("publicar_en_ebay", False)),
                 "image_b64": str(r.get("image_b64", ""))
             }
             tabla_airtable.create(datos_limpios)
             guardados += 1
-        st.success(f"Guardados correctamente: {guardados} estampillas en Airtable")
+        st.success(f"Guardadas correctamente: {guardados} estampillas en Airtable")
     except Exception as e:
         st.error(f"Error al guardar: {str(e)}")
+
+def publicar_seleccionadas(lista):
+    if not all([EBAY_APP_ID, EBAY_TOKEN]):
+        st.warning("Completa las claves de eBay primero.")
+        return
+    if not lista:
+        st.info("No hay estampillas marcadas para publicar.")
+        return
+    publicadas = 0
+    for r in lista:
+        datos = {
+            "country": r.get("country", "Desconocido"),
+            "year": r.get("year", ""),
+            "face_value": r.get("face_value", ""),
+            "condition": r.get("condition", ""),
+            "sale_price_gbp": float(r.get("sale_price_gbp", 0)),
+            "description": r.get("description", "")
+        }
+        ok, res = publicar_en_ebay(datos)
+        if ok:
+            st.success(f"✅ Publicado: {res}")
+            publicadas += 1
+        else:
+            st.warning(f"No se pudo publicar: {res}")
+    st.info(f"Total publicadas: {publicadas}")
 
 # FUNCIONES DE PROCESAMIENTO
 def reducir_imagen(img):
@@ -351,7 +379,8 @@ else:
             st.rerun()
 
 if archivos:
-    nuevos_a_guardar = []
+    seleccionadas_guardar = []
+    seleccionadas_publicar = []
     for i, a in enumerate(archivos,1):
         st.subheader(f"📷 Imagen {i}")
         img = Image.open(a)
@@ -368,7 +397,6 @@ if archivos:
                 precio = d.get("sale_price_gbp") or d.get("Sale_price_gbp") or 0
                 desc = d.get("description") or d.get("Description") or "Sin detalles"
 
-                # ✅ CORREGIDO: Convertimos precio a número seguro
                 try:
                     precio_num = float(str(precio).replace(",", "."))
                 except:
@@ -382,26 +410,28 @@ if archivos:
                 st.write(f"- Precio venta: £{precio_num:.2f} GBP")
                 st.write(f"- Descripción: {desc}")
 
-                guardar = st.checkbox(f"Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
-                publicar = st.checkbox(f"Marcar para publicar en eBay", value=False, key=f"publicar_{i}_{n}")
+                guardar = st.checkbox(f"Guardar en Airtable", value=True, key=f"guardar_{i}_{n}")
+                publicar = st.checkbox(f"Marcar para eBay", value=False, key=f"publicar_{i}_{n}")
+
+                datos_estampa = {
+                    "country": pais, "year": anio, "face_value": valor,
+                    "condition": estado, "sale_price_gbp": precio_num,
+                    "description": desc, "publicar_en_ebay": publicar, "image_b64": b64
+                }
                 if guardar:
-                    nuevos_a_guardar.append({
-                        "id": len(df)+len(nuevos_a_guardar)+1,
-                        "saved_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "country": d.get('country','Desconocido'),
-                        "year": d.get('year','Desconocido'),
-                        "face_value": d.get('face_value','Desconocido'),
-                        "condition": d.get('condition','Desconocido'),
-                        "sale_price_gbp": precio_num,
-                        "description": d.get('description','Sin detalles'),
-                        "publicar_en_ebay": publicar,
-                        "image_b64": b64
-                    })
-    if nuevos_a_guardar:
-        guardar_en_base_datos(nuevos_a_guardar)
-        df = pd.concat([df, pd.DataFrame(nuevos_a_guardar)], ignore_index=True)
-    elif archivos:
-        st.info("No se guardó ninguna: desmarcaste todas las opciones.")
+                    seleccionadas_guardar.append(datos_estampa)
+                if publicar:
+                    seleccionadas_publicar.append(datos_estampa)
+
+    st.divider()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📥 Guardar seleccionadas en Airtable"):
+            guardar_seleccionadas(seleccionadas_guardar)
+            df = cargar_base_datos()
+    with col2:
+        if st.button("📤 Publicar seleccionadas en eBay"):
+            publicar_seleccionadas(seleccionadas_publicar)
 
 # CATÁLOGO GUARDADO
 st.header("📚 Catálogo guardado")
