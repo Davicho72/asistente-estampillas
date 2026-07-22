@@ -1,5 +1,4 @@
 import streamlit as st
-from groq import Groq
 import base64
 from PIL import Image
 import io
@@ -8,6 +7,7 @@ import json
 import re
 import time
 import pandas as pd
+import requests
 from datetime import datetime
 from pyairtable import Api
 
@@ -57,8 +57,26 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
+# CONEXIÓN A DOLA (EN LUGAR DE GROQ)
+DOLA_API_KEY = os.getenv("DOLA_API_KEY", "")
+DOLA_API_URL = "https://api.dola.ai/v1/chat/completions"
+
+def llamar_dola(mensajes, temperatura=0.0, max_tokens=800):
+    cabeceras = {
+        "Authorization": f"Bearer {DOLA_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    datos = {
+        "model": "dola-vision",
+        "messages": mensajes,
+        "temperature": temperatura,
+        "max_tokens": max_tokens
+    }
+    respuesta = requests.post(DOLA_API_URL, headers=cabeceras, json=datos, timeout=60)
+    respuesta.raise_for_status()
+    return respuesta.json()["choices"][0]["message"]["content"]
+
 # CONEXIONES A SERVICIOS
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 CONECTADO_AIRTABLE = False
 try:
     api_airtable = Api(os.getenv("AIRTABLE_API_KEY"))
@@ -120,20 +138,19 @@ def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
     return json.loads(m.group()) if m else None
 
-# FUNCIÓN CON PROTECCIÓN CONTRA LÍMITES DE GROQ
+# FUNCIÓN CON PROTECCIÓN CONTRA LÍMITES
 def analizar_estampa(img, b64):
     max_intentos = 3
     for intento in range(max_intentos):
         try:
-            resp = client.chat.completions.create(
-                model="qwen/qwen3.6-27b",
-                messages=[{"role":"user","content":[
+            respuesta = llamar_dola([{
+                "role": "user",
+                "content": [
                     {"type":"text","text":"Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."},
                     {"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}
-                ]}],
-                temperature=0.0, max_tokens=800
-            )
-            res = extraer_json(resp.choices[0].message.content)
+                ]
+            }])
+            res = extraer_json(respuesta)
             return res if isinstance(res,list) else [res]
         except Exception as e:
             error_texto = str(e).lower()
@@ -154,9 +171,13 @@ def analizar_estampa(img, b64):
 def transcribir_audio(audio):
     with open("temp.wav","wb") as f: f.write(audio.read())
     with open("temp.wav","rb") as f:
-        t = client.audio.transcriptions.create(model="whisper-large-v3-turbo", file=f, response_format="text")
+        arch = base64.b64encode(f.read()).decode("utf-8")
     os.remove("temp.wav")
-    return t
+    respuesta = llamar_dola([{
+        "role":"user",
+        "content":[{"type":"text","text":"Transcribe exactamente el audio, sin añadir nada más."},{"type":"input_file","input_file":f"data:audio/wav;base64,{arch}"}]
+    }])
+    return respuesta
 
 # INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
@@ -242,13 +263,12 @@ if st.button("🔍 Buscar ahora"):
     else:
         with st.spinner("Obteniendo datos actualizados..."):
             try:
-                respuesta = client.chat.completions.create(
-                    model="qwen/qwen3.6-27b",
-                    messages=[{"role":"user","content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos como 'plataforma', solo información concreta actualizada al 2026."}],
-                    temperature=0.1, max_tokens=1500
-                )
+                respuesta = llamar_dola([{
+                    "role":"user",
+                    "content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos como 'plataforma', solo información concreta actualizada al 2026."
+                }], temperatura=0.1, max_tokens=1500)
                 st.success("✅ Datos exactos obtenidos en tiempo real:")
-                st.markdown(respuesta.choices[0].message.content)
+                st.markdown(respuesta)
             except Exception as e:
                 st.error(f"⚠️ No se pudo consultar en tiempo real: {str(e)}")
                 st.markdown("""
@@ -273,13 +293,9 @@ else:
 
 if st.button("Enviar consulta") and pregunta:
     with st.spinner("Procesando..."):
-        resp = client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
-            messages=[{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}],
-            temperature=0.7, max_tokens=600
-        )
+        respuesta = llamar_dola([{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}], temperatura=0.7, max_tokens=600)
         st.success("✅ Respuesta:")
-        st.write(respuesta.choices[0].message.content)
+        st.write(respuesta)
 
 # DESCARGA DE DATOS
 st.download_button("📥 Descargar CSV",
