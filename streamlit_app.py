@@ -8,6 +8,7 @@ import re
 import time
 import pandas as pd
 import requests
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pyairtable import Api
 
@@ -56,9 +57,9 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🔧 CONEXIÓN A OPENROUTER (SOLAMENTE CAMBIADO EL MODELO)
+# 🔧 CONEXIÓN A OPENROUTER
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODELO = "meta-llama/llama-3.2-11b-vision-instruct:free"  # ✅ Solución 1: modelo más estable
+OPENROUTER_MODELO = "meta-llama/llama-3.2-11b-vision-instruct:free"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 def llamar_openrouter(mensajes, temperatura=0.0, max_tokens=800):
@@ -78,7 +79,81 @@ def llamar_openrouter(mensajes, temperatura=0.0, max_tokens=800):
     respuesta.raise_for_status()
     return respuesta.json()["choices"][0]["message"]["content"]
 
-# CONEXIONES A SERVICIOS
+# 🔧 CONFIGURACIÓN EBAY Y PUBLICACIÓN
+EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
+EBAY_CERT_ID = os.getenv("EBAY_CERT_ID", "")
+EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
+EBAY_TOKEN = os.getenv("EBAY_TOKEN", "")
+EBAY_SITIO = "3"
+CATEGORIA_EBAY = "260"
+MONEDA_EBAY = "GBP"
+CAMPO_PUBLICAR = "Publicar en eBay"
+
+def publicar_en_ebay(datos):
+    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]):
+        return False, "Faltan claves de eBay"
+    if not datos.get("sale_price_gbp") or datos.get("sale_price_gbp") <= 0:
+        return False, "Precio en GBP no válido"
+
+    url = "https://api.ebay.com/ws/api.dll"
+    cabeceras = {
+        "X-EBAY-API-CALL-NAME": "AddFixedPriceItem",
+        "X-EBAY-API-APP-NAME": EBAY_APP_ID,
+        "X-EBAY-API-DEV-NAME": EBAY_DEV_ID,
+        "X-EBAY-API-CERT-NAME": EBAY_CERT_ID,
+        "X-EBAY-API-SITEID": EBAY_SITIO,
+        "Authorization": f"Bearer {EBAY_TOKEN}",
+        "Content-Type": "text/xml"
+    }
+
+    titulo = f"Estampilla {datos['country']} {datos['year'] or ''} - {datos['condition']}"[:80]
+    descripcion = f"""Estampilla auténtica y original.
+País: {datos['country']}
+Año: {datos['year'] or 'No especificado'}
+Valor facial: {datos['face_value'] or 'No especificado'}
+Estado: {datos['condition'] or 'No especificado'}
+Detalles: {datos['description'] or 'Sin detalles adicionales'}
+
+Envío seguro y rápido desde Reino Unido."""
+
+    xml = f"""<?xml version="1.0" encoding="utf-8"?>
+    <AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+        <RequesterCredentials><eBayAuthToken>{EBAY_TOKEN}</eBayAuthToken></RequesterCredentials>
+        <Item>
+            <Title>{titulo}</Title>
+            <Description>{descripcion}</Description>
+            <Category>{CATEGORIA_EBAY}</Category>
+            <StartPrice currencyID="{MONEDA_EBAY}">{datos['sale_price_gbp']}</StartPrice>
+            <Quantity>1</Quantity>
+            <ListingDuration>GTC</ListingDuration>
+            <Country>GB</Country>
+            <Currency>{MONEDA_EBAY}</Currency>
+            <Location>Reino Unido</Location>
+            <ShipToLocations>GB</ShipToLocations>
+            <ReturnPolicy>
+                <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
+                <RefundOption>MoneyBack</RefundOption>
+                <ReturnsWithinOption>Days_30</ReturnsWithinOption>
+                <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
+            </ReturnPolicy>
+        </Item>
+    </AddFixedPriceItemRequest>"""
+
+    try:
+        resp = requests.post(url, data=xml.encode("utf-8"), headers=cabeceras, timeout=60)
+        raiz = ET.fromstring(resp.text)
+        id_anuncio = raiz.find(".//ItemID")
+        errores = raiz.findall(".//Errors")
+        if id_anuncio is not None:
+            return True, id_anuncio.text
+        elif errores:
+            msg = [e.find("LongMessage").text for e in errores if e.find("LongMessage") is not None]
+            return False, " | ".join(msg[:2])
+        return False, f"Error {resp.status_code}"
+    except Exception as e:
+        return False, str(e)
+
+# CONEXIÓN A AIRTABLE
 CONECTADO_AIRTABLE = False
 try:
     api_airtable = Api(os.getenv("AIRTABLE_API_KEY"))
@@ -87,22 +162,66 @@ try:
 except Exception:
     pass
 
+# 🚀 PUBLICACIÓN DESDE AIRTABLE CUANDO EL CAMPO ES POSITIVO
+def publicar_desde_airtable():
+    if not CONECTADO_AIRTABLE:
+        st.warning("Sin conexión a Airtable")
+        return
+    if not all([EBAY_APP_ID, EBAY_TOKEN]):
+        st.warning("Completa las claves de eBay primero")
+        return
+
+    st.info("Revisando registros en Airtable...")
+    registros = tabla_airtable.all()
+    publicados = 0
+    omitidos = 0
+    errores = []
+
+    for reg in registros:
+        campos = reg["fields"]
+        debe_publicar = bool(campos.get(CAMPO_PUBLICAR, False))
+
+        if not debe_publicar:
+            omitidos += 1
+            continue
+
+        datos = {
+            "country": campos.get("country", "Desconocido"),
+            "year": campos.get("year", ""),
+            "face_value": campos.get("Face_value", ""),
+            "condition": campos.get("condition", ""),
+            "sale_price_gbp": float(campos.get("sale_price_gbp", 0)) or 0,
+            "description": campos.get("description", "")
+        }
+
+        ok, res = publicar_en_ebay(datos)
+        if ok:
+            st.success(f"✅ Publicado en eBay — ID: {res}")
+            tabla_airtable.update(reg["id"], {CAMPO_PUBLICAR: False, "ID eBay": res})
+            publicados += 1
+        else:
+            errores.append(f"Registro {reg['id']}: {res}")
+
+    st.info(f"Revisados: {len(registros)} | Publicados: {publicados} | Omitidos: {omitidos}")
+    for e in errores:
+        st.warning(e)
+
 # GESTIÓN DE BASE DE DATOS
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
-        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","image_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","image_b64"])
     try:
         return pd.DataFrame([{
             "id": f.get("id"),"saved_date":f.get("saved_date"),"country":f.get("country"),"year":f.get("year"),
             "Face_value":f.get("Face_value"),"condition":f.get("condition"),"sale_price_gbp":f.get("sale_price_gbp"),
-            "description":f.get("description"),"image_b64":f.get("image_b64")
+            "description":f.get("description"),"Publicar en eBay":bool(f.get("Publicar en eBay",False)),"image_b64":f.get("image_b64")
         } for f in [r["fields"] for r in tabla_airtable.all()]])
     except Exception:
-        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","image_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","image_b64"])
 
 def guardar_en_base_datos(regs):
     if not CONECTADO_AIRTABLE:
-        st.warning("⚠️ No hay conexión con Airtable, no se guardó.")
+        st.warning("No hay conexión con Airtable, no se guardó.")
         return
     try:
         guardados = 0
@@ -116,14 +235,14 @@ def guardar_en_base_datos(regs):
                 "condition": str(r.get("condition", "Unknown")),
                 "sale_price_gbp": float(r.get("sale_price_gbp", 0)) if r.get("sale_price_gbp") not in [None, ""] else 0.0,
                 "description": str(r.get("description", "No details")),
+                "Publicar en eBay": bool(r.get("publicar_en_ebay", False)),
                 "image_b64": str(r.get("image_b64", ""))
             }
             tabla_airtable.create(datos_limpios)
             guardados += 1
-        st.success(f"✅ Guardados correctamente: {guardados} estampillas en Airtable")
+        st.success(f"Guardados correctamente: {guardados} estampillas en Airtable")
     except Exception as e:
-        st.error(f"❌ Error al guardar: {str(e)}")
-        st.info("Revisa nombres de columnas y permisos.")
+        st.error(f"Error al guardar: {str(e)}")
 
 # FUNCIONES DE PROCESAMIENTO
 def reducir_imagen(img):
@@ -140,14 +259,13 @@ def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
     return json.loads(m.group()) if m else None
 
-# FUNCIÓN CON PROTECCIÓN Y ESPERA (SOLAMENTE AÑADIDA LA ESPERA)
 def analizar_estampa(img, b64):
     max_intentos = 3
     instruccion = "Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. El precio de venta siempre debe expresarse en libras esterlinas (GBP), nunca en otra moneda. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."
     
     for intento in range(max_intentos):
         try:
-            time.sleep(1.5)  # ✅ Solución 2: espera automática para no superar límites
+            time.sleep(1.5)
             respuesta = llamar_openrouter([{
                 "role": "user",
                 "content": [
@@ -161,7 +279,7 @@ def analizar_estampa(img, b64):
             error_texto = str(e).lower()
             if "ratelimit" in error_texto or "429" in error_texto:
                 if intento < max_intentos - 1:
-                    st.warning(f"⏳ Límite temporal alcanzado, esperando {intento+2}s antes de reintentar...")
+                    st.warning(f"Límite alcanzado, esperando {intento+2}s antes de reintentar...")
                     time.sleep(intento + 2)
                     continue
             return [{
@@ -186,11 +304,16 @@ def transcribir_audio(audio):
 
 # INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
-if CONECTADO_AIRTABLE: st.success("✅ Conectado correctamente a Airtable")
+if CONECTADO_AIRTABLE: st.success("Conectado correctamente a Airtable")
 
 df = cargar_base_datos()
 if "activar_camara" not in st.session_state: st.session_state.activar_camara = False
 if "ver_catalogo" not in st.session_state: st.session_state.ver_catalogo = False
+
+# BOTÓN DE PUBLICACIÓN DESDE AIRTABLE
+st.header("🚀 Publicar desde Airtable")
+if st.button("🔍 Revisar y publicar registros marcados"):
+    publicar_desde_airtable()
 
 # CARGA Y ANÁLISIS
 st.header("📤 Cargar o tomar estampillas")
@@ -215,7 +338,7 @@ if archivos:
         with st.spinner("Analizando datos..."):
             b64 = reducir_imagen(img)
             estampas = analizar_estampa(img, b64)
-            st.success(f"✅ {len(estampas)} estampillas detectadas:")
+            st.success(f"{len(estampas)} estampillas detectadas:")
             for n, d in enumerate(estampas,1):
                 pais = d.get("country") or d.get("Country") or "Desconocido"
                 anio = d.get("year") or d.get("Year") or "Desconocido"
@@ -226,65 +349,56 @@ if archivos:
 
                 st.markdown(f"""
 **Estampilla {n}**
-- 📍 País: {pais}
-- 📅 Año: {anio}
-- 💷 Valor facial: {valor}
-- 📋 Estado: {estado}
-- 💰 Precio venta: £{precio:.2f} GBP
-- 📝 Descripción: {desc}
+- País: {pais}
+- Año: {anio}
+- Valor facial: {valor}
+- Estado: {estado}
+- Precio venta: £{precio:.2f} GBP
+- Descripción: {desc}
                 """)
-                guardar = st.checkbox(f"📦 Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
+                guardar = st.checkbox(f"Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
+                publicar = st.checkbox(f"Marcar para publicar en eBay", value=False, key=f"publicar_{i}_{n}")
                 if guardar:
                     nuevos_a_guardar.append({
                         "id": len(df)+len(nuevos_a_guardar)+1, "saved_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         "country": d.get('country','Desconocido'), "year": d.get('year','Desconocido'),
                         "face_value": d.get('face_value','Desconocido'), "condition": d.get('condition','Desconocido'),
                         "sale_price_gbp": d.get('sale_price_gbp',0), "description": d.get('description','Sin detalles'),
-                        "image_b64": b64
+                        "publicar_en_ebay": publicar, "image_b64": b64
                     })
     if nuevos_a_guardar:
         guardar_en_base_datos(nuevos_a_guardar)
         df = pd.concat([df, pd.DataFrame(nuevos_a_guardar)], ignore_index=True)
     elif archivos:
-        st.info("ℹ️ No se guardó ninguna: desmarcaste todas las opciones.")
+        st.info("No se guardó ninguna: desmarcaste todas las opciones.")
 
 # CATÁLOGO GUARDADO
 st.header("📚 Catálogo guardado")
-if st.button("📋 Ver / Ocultar catálogo"): st.session_state.ver_catalogo = not st.session_state.ver_catalogo
+if st.button("Ver / Ocultar catálogo"): st.session_state.ver_catalogo = not st.session_state.ver_catalogo
 if st.session_state.ver_catalogo and not df.empty:
     m = df.copy()
     m["sale_price_gbp"] = m["sale_price_gbp"].apply(lambda x: f"£{x:.2f} GBP")
+    m["Publicar en eBay"] = m["Publicar en eBay"].apply(lambda x: "✅ Sí" if x else "❌ No")
     m["Imagen"] = m["image_b64"].apply(lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
-    st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Imagen"]],
+    st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","Publicar en eBay","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
 # BUSCAR COMPRADORES
 st.header("🌍 Buscar compradores y contactos")
-st.info("Al pulsar se obtienen datos completos: nombre oficial, web, correos, dirección, a quién vender y cómo contactar.")
-
-if st.button("🔍 Buscar ahora"):
+if st.button("Buscar ahora"):
     if df.empty:
         st.warning("Primero carga y guarda al menos una estampilla.")
     else:
-        with st.spinner("Obteniendo datos actualizados..."):
+        with st.spinner("Obteniendo datos..."):
             try:
                 respuesta = llamar_openrouter([{
                     "role":"user",
-                    "content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos como 'plataforma', solo información concreta actualizada al 2026."
+                    "content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos, solo información concreta actualizada al 2026."
                 }], temperatura=0.1, max_tokens=1500)
-                st.success("✅ Datos exactos obtenidos en tiempo real:")
+                st.success("Datos exactos obtenidos:")
                 st.markdown(respuesta)
             except Exception as e:
-                st.error(f"⚠️ No se pudo consultar en tiempo real: {str(e)}")
-                st.markdown("""
-**Delcampe International SRL**
-- ✅ A quién le vendes exactamente: Compradores particulares, coleccionistas serios y pequeños comerciantes de filatelia de todo el mundo
-- 🌐 Web oficial: https://www.delcampe.net
-- ✉️ Correos directos: `sales@delcampe.com` (ventas), `info@delcampe.com` (información general), `support@delcampe-support.com` (soporte)
-- 📍 Dirección completa: Rue de la Filature 25, 1480 Tubize, Bélgica
-- 📞 Cómo comunicarte: Formulario oficial https://www.delcampe.net/en_GB/contact | Mensajería interna de la web
-- 📝 Cómo vender: Regístrate como vendedor, sube fotos y datos de tus estampillas; los compradores te contactarán directamente por la plataforma
-""")
+                st.error(f"No se pudo consultar: {str(e)}")
 
 # CONSULTAS GENERALES
 st.header("💬 Otras consultas")
@@ -294,15 +408,14 @@ if entrada == "✍️ Texto":
     pregunta = st.text_area("Escribe tu consulta", height=80)
 else:
     audio = st.audio_input("Graba tu mensaje")
-    if audio: pregunta = transcribir_audio(audio); st.write(f"📝: {pregunta}")
+    if audio: pregunta = transcribir_audio(audio); st.write(f"Transcripción: {pregunta}")
 
 if st.button("Enviar consulta") and pregunta:
     with st.spinner("Procesando..."):
         respuesta = llamar_openrouter([{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}], temperatura=0.7, max_tokens=600)
-        st.success("✅ Respuesta:")
+        st.success("Respuesta:")
         st.write(respuesta)
 
-# DESCARGA DE DATOS
 st.download_button("📥 Descargar CSV",
     data=df.drop(columns=["image_b64"]).to_csv(index=False).encode("utf-8"),
     file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv")
