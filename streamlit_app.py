@@ -57,7 +57,7 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🔧 API MISTRAL (FRANCIA) — SOLO ESTA PARTE CAMBIADA
+# 🔧 API MISTRAL (FRANCIA)
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = "pixtral-12b-2409"
@@ -89,7 +89,7 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-# 🔧 CONFIGURACIÓN EBAY Y PUBLICACIÓN — IGUAL
+# 🔧 CONFIGURACIÓN EBAY Y PUBLICACIÓN
 EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
 EBAY_CERT_ID = os.getenv("EBAY_CERT_ID", "")
 EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
@@ -162,7 +162,7 @@ Envío seguro y rápido desde Reino Unido."""
     except Exception as e:
         return False, str(e)
 
-# CONEXIÓN A AIRTABLE — IGUAL
+# CONEXIÓN A AIRTABLE
 CONECTADO_AIRTABLE = False
 try:
     api_airtable = Api(os.getenv("AIRTABLE_API_KEY"))
@@ -171,7 +171,7 @@ try:
 except Exception:
     pass
 
-# 🚀 PUBLICACIÓN DESDE AIRTABLE — IGUAL
+# 🚀 PUBLICACIÓN DESDE AIRTABLE
 def publicar_desde_airtable():
     if not CONECTADO_AIRTABLE:
         st.warning("Sin conexión a Airtable")
@@ -215,7 +215,7 @@ def publicar_desde_airtable():
     for e in errores:
         st.warning(e)
 
-# GESTIÓN DE BASE DE DATOS — IGUAL
+# GESTIÓN DE BASE DE DATOS
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
         return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","image_b64"])
@@ -253,7 +253,7 @@ def guardar_en_base_datos(regs):
     except Exception as e:
         st.error(f"Error al guardar: {str(e)}")
 
-# FUNCIONES DE PROCESAMIENTO — AHORA USAN MISTRAL
+# FUNCIONES DE PROCESAMIENTO
 def reducir_imagen(img):
     if img.mode in ("RGBA","P"):
         fondo = Image.new("RGB", img.size, (255,255,255))
@@ -314,7 +314,7 @@ def transcribir_audio(audio):
     }])
     return respuesta
 
-# INTERFAZ PRINCIPAL — IGUAL
+# INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
 if CONECTADO_AIRTABLE:
     st.success("Conectado correctamente a Airtable")
@@ -368,15 +368,15 @@ if archivos:
                 precio = d.get("sale_price_gbp") or d.get("Sale_price_gbp") or 0
                 desc = d.get("description") or d.get("Description") or "Sin detalles"
 
-                st.markdown(f"""
-**Estampilla {n}**
-- País: {pais}
-- Año: {anio}
-- Valor facial: {valor}
-- Estado: {estado}
-- Precio venta: £{precio:.2f} GBP
-- Descripción: {desc}
-                """)
+                # ✅ ARREGLADO: Usamos st.write para evitar errores de caracteres especiales
+                st.subheader(f"Estampilla {n}")
+                st.write(f"- País: {pais}")
+                st.write(f"- Año: {anio}")
+                st.write(f"- Valor facial: {valor}")
+                st.write(f"- Estado: {estado}")
+                st.write(f"- Precio venta: £{precio:.2f} GBP")
+                st.write(f"- Descripción: {desc}")
+
                 guardar = st.checkbox(f"Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
                 publicar = st.checkbox(f"Marcar para publicar en eBay", value=False, key=f"publicar_{i}_{n}")
                 if guardar:
