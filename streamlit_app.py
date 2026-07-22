@@ -56,9 +56,9 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🔧 CONEXIÓN A OPENROUTER (EN LUGAR DE GROQ)
+# 🔧 CONEXIÓN A OPENROUTER (SOLAMENTE CAMBIADO EL MODELO)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_MODELO = "qwen/qwen3.6-vision-instruct:free"  # Modelo gratuito, mismo que usabas
+OPENROUTER_MODELO = "meta-llama/llama-3.2-11b-vision-instruct:free"  # ✅ Solución 1: modelo más estable
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 def llamar_openrouter(mensajes, temperatura=0.0, max_tokens=800):
@@ -74,7 +74,7 @@ def llamar_openrouter(mensajes, temperatura=0.0, max_tokens=800):
         "temperature": temperatura,
         "max_tokens": max_tokens
     }
-    respuesta = requests.post(OPENROUTER_URL, headers=cabeceras, json=datos, timeout=60)
+    respuesta = requests.post(OPENROUTER_URL, headers=cabeceras, json=datos, timeout=90)
     respuesta.raise_for_status()
     return respuesta.json()["choices"][0]["message"]["content"]
 
@@ -140,13 +140,14 @@ def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
     return json.loads(m.group()) if m else None
 
-# FUNCIÓN CON PROTECCIÓN CONTRA LÍMITES
+# FUNCIÓN CON PROTECCIÓN Y ESPERA (SOLAMENTE AÑADIDA LA ESPERA)
 def analizar_estampa(img, b64):
     max_intentos = 3
     instruccion = "Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. El precio de venta siempre debe expresarse en libras esterlinas (GBP), nunca en otra moneda. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."
     
     for intento in range(max_intentos):
         try:
+            time.sleep(1.5)  # ✅ Solución 2: espera automática para no superar límites
             respuesta = llamar_openrouter([{
                 "role": "user",
                 "content": [
@@ -160,8 +161,8 @@ def analizar_estampa(img, b64):
             error_texto = str(e).lower()
             if "ratelimit" in error_texto or "429" in error_texto:
                 if intento < max_intentos - 1:
-                    st.warning(f"⏳ Límite temporal alcanzado, esperando {intento+1}s antes de reintentar...")
-                    time.sleep(intento + 1)
+                    st.warning(f"⏳ Límite temporal alcanzado, esperando {intento+2}s antes de reintentar...")
+                    time.sleep(intento + 2)
                     continue
             return [{
                 "country":"Desconocido",
@@ -257,7 +258,7 @@ if st.session_state.ver_catalogo and not df.empty:
     st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-# BUSCAR COMPRADORES (DATOS EXACTOS EN TIEMPO REAL)
+# BUSCAR COMPRADORES
 st.header("🌍 Buscar compradores y contactos")
 st.info("Al pulsar se obtienen datos completos: nombre oficial, web, correos, dirección, a quién vender y cómo contactar.")
 
