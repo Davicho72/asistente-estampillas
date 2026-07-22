@@ -218,15 +218,15 @@ def publicar_desde_airtable():
 # GESTIÓN DE BASE DE DATOS
 def cargar_base_datos():
     if not CONECTADO_AIRTABLE:
-        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","image_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","ID eBay","image_b64"])
     try:
         return pd.DataFrame([{
             "id": f.get("id"),"saved_date":f.get("saved_date"),"country":f.get("country"),"year":f.get("year"),
             "Face_value":f.get("Face_value"),"condition":f.get("condition"),"sale_price_gbp":f.get("sale_price_gbp"),
-            "description":f.get("description"),"Publicar en eBay":bool(f.get("Publicar en eBay",False)),"image_b64":f.get("image_b64")
+            "description":f.get("description"),"Publicar en eBay":bool(f.get("Publicar en eBay",False)),"ID eBay":f.get("ID eBay",""),"image_b64":f.get("image_b64")
         } for f in [r["fields"] for r in tabla_airtable.all()]])
     except Exception:
-        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","image_b64"])
+        return pd.DataFrame(columns=["id","saved_date","country","year","Face_value","condition","sale_price_gbp","description","Publicar en eBay","ID eBay","image_b64"])
 
 def guardar_seleccionadas(lista):
     if not CONECTADO_AIRTABLE:
@@ -275,11 +275,25 @@ def publicar_seleccionadas(lista):
         }
         ok, res = publicar_en_ebay(datos)
         if ok:
-            st.success(f"✅ Publicado: {res}")
+            st.success(f"✅ Publicado correctamente — ID eBay: {res}")
+            if CONECTADO_AIRTABLE:
+                fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
+                tabla_airtable.create({
+                    "saved_date": fecha_formateada,
+                    "country": r.get("country", "Unknown"),
+                    "year": r.get("year", "Unknown"),
+                    "Face_value": r.get("face_value", "Unknown"),
+                    "condition": r.get("condition", "Unknown"),
+                    "sale_price_gbp": float(r.get("sale_price_gbp", 0)),
+                    "description": r.get("description", "No details"),
+                    "Publicar en eBay": False,
+                    "ID eBay": res,
+                    "image_b64": r.get("image_b64", "")
+                })
             publicadas += 1
         else:
             st.warning(f"No se pudo publicar: {res}")
-    st.info(f"Total publicadas: {publicadas}")
+    st.info(f"Total publicadas correctamente: {publicadas}")
 
 # FUNCIONES DE PROCESAMIENTO
 def reducir_imagen(img):
@@ -432,6 +446,7 @@ if archivos:
     with col2:
         if st.button("📤 Publicar seleccionadas en eBay"):
             publicar_seleccionadas(seleccionadas_publicar)
+            df = cargar_base_datos()
 
 # CATÁLOGO GUARDADO
 st.header("📚 Catálogo guardado")
@@ -442,7 +457,7 @@ if st.session_state.ver_catalogo and not df.empty:
     m["sale_price_gbp"] = m["sale_price_gbp"].apply(lambda x: f"£{x:.2f} GBP")
     m["Publicar en eBay"] = m["Publicar en eBay"].apply(lambda x: "✅ Sí" if x else "❌ No")
     m["Imagen"] = m["image_b64"].apply(lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
-    st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","Publicar en eBay","description","Imagen"]],
+    st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","Publicar en eBay","ID eBay","description","Imagen"]],
         column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
 # BUSCAR COMPRADORES
