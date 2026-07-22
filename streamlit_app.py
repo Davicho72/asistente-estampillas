@@ -368,13 +368,18 @@ if archivos:
                 precio = d.get("sale_price_gbp") or d.get("Sale_price_gbp") or 0
                 desc = d.get("description") or d.get("Description") or "Sin detalles"
 
-                # ✅ ARREGLADO: Usamos st.write para evitar errores de caracteres especiales
+                # ✅ CORREGIDO: Convertimos precio a número seguro
+                try:
+                    precio_num = float(str(precio).replace(",", "."))
+                except:
+                    precio_num = 0.0
+
                 st.subheader(f"Estampilla {n}")
                 st.write(f"- País: {pais}")
                 st.write(f"- Año: {anio}")
                 st.write(f"- Valor facial: {valor}")
                 st.write(f"- Estado: {estado}")
-                st.write(f"- Precio venta: £{precio:.2f} GBP")
+                st.write(f"- Precio venta: £{precio_num:.2f} GBP")
                 st.write(f"- Descripción: {desc}")
 
                 guardar = st.checkbox(f"Guardar esta estampilla en Airtable", value=True, key=f"guardar_{i}_{n}")
@@ -387,7 +392,7 @@ if archivos:
                         "year": d.get('year','Desconocido'),
                         "face_value": d.get('face_value','Desconocido'),
                         "condition": d.get('condition','Desconocido'),
-                        "sale_price_gbp": d.get('sale_price_gbp',0),
+                        "sale_price_gbp": precio_num,
                         "description": d.get('description','Sin detalles'),
                         "publicar_en_ebay": publicar,
                         "image_b64": b64
