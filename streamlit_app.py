@@ -31,12 +31,21 @@ st.set_page_config(
     page_title="Asistente Estampillas",
     layout="wide",
     initial_sidebar_state="collapsed",
-    menu_items={"About": "Asistente de análisis de estampillas"}
+    menu_items={"About": "Asistente personal para tu colección de estampillas"}
 )
 
 st.markdown("""
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:;">
+
+<!-- 📱 CONFIGURACIÓN PARA TU APP E ICONO PERSONALIZADO -->
+<link rel="icon" type="image/png" href="PON_EL_ENLACE_DE_TU_ICONO_AQUI">
+<link rel="apple-touch-icon" href="PON_EL_ENLACE_DE_TU_ICONO_AQUI">
+<meta name="theme-color" content="#2c3e50">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Gestiona, analiza y vende tu colección de estampillas">
+
 <style>
 html, body, .stApp {width:100%!important;max-width:100%!important;overflow-x:hidden!important;margin:0!important;padding:0.5rem!important;}
 * {box-sizing:border-box!important;}
@@ -79,7 +88,6 @@ def guardar_en_base_datos(regs):
         guardados = 0
         for r in regs:
             fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
-
             datos_limpios = {
                 "saved_date": fecha_formateada,
                 "country": str(r.get("country", "Unknown")),
@@ -112,7 +120,7 @@ def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
     return json.loads(m.group()) if m else None
 
-# ✅ FUNCIÓN CON PROTECCIÓN CONTRA LÍMITES DE GROQ
+# FUNCIÓN CON PROTECCIÓN CONTRA LÍMITES DE GROQ
 def analizar_estampa(img, b64):
     max_intentos = 3
     for intento in range(max_intentos):
@@ -271,7 +279,7 @@ if st.button("Enviar consulta") and pregunta:
             temperature=0.7, max_tokens=600
         )
         st.success("✅ Respuesta:")
-        st.write(resp.choices[0].message.content)
+        st.write(respuesta.choices[0].message.content)
 
 # DESCARGA DE DATOS
 st.download_button("📥 Descargar CSV",
