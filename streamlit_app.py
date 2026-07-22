@@ -57,7 +57,7 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🔧 API SOLAR (UPSTAGE) — SOLO SE CAMBIÓ ESTA PARTE
+# 🔧 API SOLAR (UPSTAGE) — CORREGIDA PARA TEXTO E IMÁGENES
 UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
 UPSTAGE_URL = "https://api.upstage.ai/v1/solar/chat/completions"
 UPSTAGE_MODEL = "solar-vision-1.5-preview"
@@ -69,15 +69,26 @@ def llamar_solar(mensajes, temperatura=0.0, max_tokens=800):
         "Authorization": f"Bearer {UPSTAGE_API_KEY}",
         "Content-Type": "application/json"
     }
+    # Ajusta el formato: texto siempre como lista de objetos
+    mensajes_formateados = []
+    for m in mensajes:
+        if isinstance(m["content"], str):
+            mensajes_formateados.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
+        else:
+            mensajes_formateados.append(m)
     datos = {
         "model": UPSTAGE_MODEL,
-        "messages": mensajes,
+        "messages": mensajes_formateados,
         "temperature": temperatura,
         "max_tokens": max_tokens
     }
-    respuesta = requests.post(UPSTAGE_URL, headers=cabeceras, json=datos, timeout=90)
-    respuesta.raise_for_status()
-    return respuesta.json()["choices"][0]["message"]["content"]
+    try:
+        respuesta = requests.post(UPSTAGE_URL, headers=cabeceras, json=datos, timeout=90)
+        if not respuesta.ok:
+            return f"ERROR API: {respuesta.status_code} - {respuesta.text[:300]}"
+        return respuesta.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Error conexión: {str(e)}"
 
 # 🔧 CONFIGURACIÓN EBAY Y PUBLICACIÓN — IGUAL
 EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
@@ -161,7 +172,7 @@ try:
 except Exception:
     pass
 
-# 🚀 PUBLICACIÓN DESDE AIRTABLE — ARREGLADO EL ERROR DE SINTAXIS
+# 🚀 PUBLICACIÓN DESDE AIRTABLE — ERROR DE SINTAXIS ARREGLADO
 def publicar_desde_airtable():
     if not CONECTADO_AIRTABLE:
         st.warning("Sin conexión a Airtable")
@@ -243,7 +254,7 @@ def guardar_en_base_datos(regs):
     except Exception as e:
         st.error(f"Error al guardar: {str(e)}")
 
-# FUNCIONES DE PROCESAMIENTO — IGUAL (AHORA USAN SOLAR)
+# FUNCIONES DE PROCESAMIENTO — IGUAL
 def reducir_imagen(img):
     if img.mode in ("RGBA","P"):
         fondo = Image.new("RGB", img.size, (255,255,255))
