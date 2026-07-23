@@ -109,7 +109,7 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-# 🔧 CONFIGURACIÓN Y FUNCIÓN DE TOKEN EBAY
+# 🔧 CONFIGURACIÓN Y FUNCIÓN DE TOKEN EBAY (CORREGIDA)
 EBAY_SITIO = "3"
 CATEGORIA_EBAY = "260"
 MONEDA_EBAY = "GBP"
@@ -118,18 +118,30 @@ CAMPO_PUBLICAR = "Publicar en eBay"
 def obtener_token_ebay():
     if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN]):
         return None
-    creds = f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()
-    auth_b64 = base64.b64encode(creds).decode()
+    credenciales = f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode("utf-8")
+    auth_b64 = base64.b64encode(credenciales).decode("utf-8")
     cabeceras = {
         "Authorization": f"Basic {auth_b64}",
         "Content-Type": "application/x-www-form-urlencoded"
     }
-    datos = f"grant_type=refresh_token&refresh_token={EBAY_REFRESH_TOKEN}&scope=https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.item https://api.ebay.com/oauth/api_scope/sell.account"
+    datos = {
+        "grant_type": "refresh_token",
+        "refresh_token": EBAY_REFRESH_TOKEN,
+        "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.item https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment"
+    }
     try:
-        resp = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=cabeceras, data=datos, timeout=30)
-        resp.raise_for_status()
-        return resp.json()["access_token"]
-    except Exception:
+        respuesta = requests.post(
+            "https://api.ebay.com/identity/v1/oauth2/token",
+            headers=cabeceras,
+            data=datos,
+            timeout=30
+        )
+        if not respuesta.ok:
+            st.error(f"Error al generar token: {respuesta.status_code} - {respuesta.text[:300]}")
+            return None
+        return respuesta.json()["access_token"]
+    except Exception as e:
+        st.error(f"Error de conexión al generar token: {str(e)}")
         return None
 
 def publicar_en_ebay(datos):
