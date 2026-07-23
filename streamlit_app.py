@@ -89,7 +89,7 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-# 🔧 CONFIGURACIÓN EBAY (LEE TUS NOMBRES EXACTOS DE SECRETOS)
+# 🔧 CONFIGURACIÓN EBAY (TUS NOMBRES EXACTOS)
 EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID") or os.getenv("EBAY_CLIENT_ID", "")
 EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET") or os.getenv("EBAY_CLIENT_SECRET", "")
 EBAY_DEV_ID = st.secrets.get("EBAY_RUNAME") or os.getenv("EBAY_RUNAME", "")
@@ -332,12 +332,6 @@ def analizar_estampa(img,b64):
             return d if isinstance(d,list) else [d]
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
-
-def transcribir_audio(audio):
-    with open("temp.wav","wb")as f: f.write(audio.read())
-    with open("temp.wav","rb")as f: b=base64.b64encode(f.read()).decode()
-    os.remove("temp.wav")
-    return llamar_mistral([{"role":"user","content":[{"type":"text","text":"Transcribe exactamente:"},{"type":"input_file","input_file":f"data:audio/wav;base64,{b}"}]}])
 
 # INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
