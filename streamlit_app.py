@@ -120,17 +120,14 @@ def publicar_en_ebay(datos):
     if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]):
         return False, "Faltan claves de eBay o no se pudo generar el token"
 
-    # ✅ LIMPIEZA TOTAL Y DEFINITIVA DEL PRECIO
+    # LIMPIEZA TOTAL DEL PRECIO
     try:
-        # Convertir a texto, cambiar coma por punto, quitar espacios
         precio_limpio = str(datos.get("sale_price_gbp", "0")).strip().replace(",", ".")
-        # Extraer solo el número por si hay letras
         solo_numeros = re.sub(r"[^0-9.]", "", precio_limpio)
         precio_num = float(solo_numeros)
     except:
         precio_num = 0.0
 
-    # ÚNICA comprobación: mayor que cero
     if precio_num <= 0:
         return False, "Precio en GBP no válido"
 
@@ -226,7 +223,6 @@ def publicar_desde_airtable():
             omitidos += 1
             continue
 
-        # Pasamos el valor tal cual — la limpieza la hace publicar_en_ebay
         datos = {
             "country": campos.get("country", "Desconocido"),
             "year": campos.get("year", ""),
@@ -272,7 +268,6 @@ def guardar_seleccionadas(lista):
         guardados = 0
         for r in lista:
             fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
-            # Asegurar que se guarde como número
             try:
                 precio_guardar = float(str(r.get("sale_price_gbp", 0)).replace(",", "."))
             except:
@@ -303,7 +298,6 @@ def publicar_seleccionadas(lista):
         return
     publicadas = 0
     for r in lista:
-        # Pasamos el valor tal cual — la limpieza la hace publicar_en_ebay
         datos = {
             "country": r.get("country", "Desconocido"),
             "year": r.get("year", ""),
@@ -357,7 +351,8 @@ def extraer_json(texto):
 
 def analizar_estampa(img, b64):
     max_intentos = 3
-    instruccion = "Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. El precio de venta siempre debe expresarse en libras esterlinas (GBP), nunca en otra moneda. Si no estás seguro pon 'Desconocido' en lugar de datos falsos."
+    # ✅ INSTRUCCIÓN CORREGIDA: prohibido redondear a cero
+    instruccion = "Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. EL PRECIO DE VENTA DEBE SER UN NÚMERO CON DECIMALES SI ES MENOR A 1 LIBRA: EJEMPLO 0.75, 0.50, 0.25. NUNCA PONGAS 0 NI LO REDONDEES HACIA ABAJO. El precio siempre en libras esterlinas (GBP). Si no estás seguro pon 0.50 en lugar de 0."
     
     for intento in range(max_intentos):
         try:
@@ -383,7 +378,7 @@ def analizar_estampa(img, b64):
                 "year":"Desconocido",
                 "face_value":"Desconocido",
                 "condition":"Desconocido",
-                "sale_price_gbp":0.0,
+                "sale_price_gbp":0.5,
                 "description":"Error al analizar. Revisa la clave API o intenta más tarde."
             }]
 
@@ -451,20 +446,28 @@ if archivos:
                 anio = d.get("year") or d.get("Year") or "Desconocido"
                 valor = d.get("face_value") or d.get("Face_value") or "Desconocido"
                 estado = d.get("condition") or d.get("Condition") or "Desconocido"
-                precio = d.get("sale_price_gbp") or d.get("Sale_price_gbp") or 0
+                precio = d.get("sale_price_gbp") or d.get("Sale_price_gbp") or 0.5
                 desc = d.get("description") or d.get("Description") or "Sin detalles"
 
                 try:
                     precio_num = float(str(precio).replace(",", "."))
                 except:
-                    precio_num = 0.0
+                    precio_num = 0.5
 
                 st.subheader(f"Estampilla {n}")
                 st.write(f"- País: {pais}")
                 st.write(f"- Año: {anio}")
                 st.write(f"- Valor facial: {valor}")
                 st.write(f"- Estado: {estado}")
-                st.write(f"- Precio venta: £{precio_num:.2f} GBP")
+                # ✅ PRECIO EDITABLE: mínimo 0.50, si viene 0 se pone automáticamente
+                precio_num = st.number_input(
+                    "Precio de venta en GBP",
+                    value=max(precio_num, 0.5),
+                    min_value=0.5,
+                    step=0.05,
+                    format="%.2f",
+                    key=f"precio_{i}_{n}"
+                )
                 st.write(f"- Descripción: {desc}")
 
                 guardar = st.checkbox(f"Guardar en Airtable", value=True, key=f"guardar_{i}_{n}")
