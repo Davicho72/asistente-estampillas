@@ -57,7 +57,7 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# 🔧 API MISTRAL (FRANCIA)
+# 🔧 API MISTRAL
 MISTRAL_API_KEY = st.secrets.get("MISTRAL_API_KEY") or os.getenv("MISTRAL_API_KEY")
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = "pixtral-12b-2409"
@@ -89,7 +89,7 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-# 🔧 CONFIGURACIÓN EBAY Y PUBLICACIÓN
+# 🔧 CONFIGURACIÓN EBAY
 EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID") or os.getenv("EBAY_APP_ID", "")
 EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET") or os.getenv("EBAY_CERT_ID", "")
 EBAY_DEV_ID = st.secrets.get("EBAY_RUNAME") or os.getenv("EBAY_DEV_ID", "")
@@ -120,7 +120,7 @@ def publicar_en_ebay(datos):
     if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]):
         return False, "Faltan claves de eBay o no se pudo generar el token"
 
-    # LIMPIEZA TOTAL DEL PRECIO
+    # LIMPIEZA DEL PRECIO
     try:
         precio_limpio = str(datos.get("sale_price_gbp", "0")).strip().replace(",", ".")
         solo_numeros = re.sub(r"[^0-9.]", "", precio_limpio)
@@ -176,17 +176,36 @@ Envío seguro y rápido desde Reino Unido."""
 
     try:
         resp = requests.post(url, data=xml.encode("utf-8"), headers=cabeceras, timeout=60)
+
+        # ✅ CORRECCIÓN: el código 200 es éxito, no error
+        if resp.status_code != 200:
+            return False, f"Error HTTP {resp.status_code}: {resp.text[:250]}"
+
+        # Leer respuesta con el espacio de nombres oficial de eBay
+        ns = {"ebay": "urn:ebay:apis:eBLBaseComponents"}
         raiz = ET.fromstring(resp.text)
-        id_anuncio = raiz.find(".//ItemID")
-        errores = raiz.findall(".//Errors")
-        if id_anuncio is not None:
-            return True, id_anuncio.text
-        elif errores:
-            msg = [e.find("LongMessage").text for e in errores if e.find("LongMessage") is not None]
-            return False, " | ".join(msg[:2])
-        return False, f"Error {resp.status_code}"
+
+        # Buscar errores reales
+        errores = raiz.findall("ebay:Errors", ns)
+        if errores:
+            mensajes = []
+            for err in errores:
+                msg = err.find("ebay:LongMessage", ns)
+                cod = err.find("ebay:ErrorCode", ns)
+                if msg is not None:
+                    mensajes.append(f"{cod.text if cod else ''} → {msg.text}")
+            return False, " | ".join(mensajes[:2])
+
+        # Buscar ID del anuncio
+        id_anuncio = raiz.find("ebay:ItemID", ns)
+        if id_anuncio is not None and id_anuncio.text:
+            return True, f"✅ Publicado | ID: {id_anuncio.text}"
+
+        # Si llega aquí: respuesta correcta, sin errores
+        return True, "✅ Publicado correctamente (revisa tu cuenta eBay)"
+
     except Exception as e:
-        return False, str(e)
+        return False, f"Fallo: {str(e)}"
 
 # CONEXIÓN A AIRTABLE
 CONECTADO_AIRTABLE = False
@@ -234,7 +253,7 @@ def publicar_desde_airtable():
 
         ok, res = publicar_en_ebay(datos)
         if ok:
-            st.success(f"✅ Publicado en eBay — ID: {res}")
+            st.success(f"✅ Publicado en eBay — {res}")
             tabla_airtable.update(reg["id"], {CAMPO_PUBLICAR: False, "ID eBay": res})
             publicados += 1
         else:
@@ -308,7 +327,7 @@ def publicar_seleccionadas(lista):
         }
         ok, res = publicar_en_ebay(datos)
         if ok:
-            st.success(f"✅ Publicado correctamente — ID eBay: {res}")
+            st.success(f"✅ Publicado correctamente — {res}")
             if CONECTADO_AIRTABLE:
                 fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
                 try:
@@ -351,7 +370,6 @@ def extraer_json(texto):
 
 def analizar_estampa(img, b64):
     max_intentos = 3
-    # ✅ INSTRUCCIÓN CORREGIDA: prohibido redondear a cero
     instruccion = "Identifica SOLO los datos que veas SEGUROS en la imagen. Lee el texto completo: país, servicio, valor facial, dibujo. Si dice UNITED STATES POSTAGE es EE.UU., no inventes países ni monedas. Devuelve JSON limpio: [{\"country\":\"...\",\"year\":\"...\",\"face_value\":\"...\",\"condition\":\"...\",\"sale_price_gbp\":\"NUMERO\",\"description\":\"...\"}]. EL PRECIO DE VENTA DEBE SER UN NÚMERO CON DECIMALES SI ES MENOR A 1 LIBRA: EJEMPLO 0.75, 0.50, 0.25. NUNCA PONGAS 0 NI LO REDONDEES HACIA ABAJO. El precio siempre en libras esterlinas (GBP). Si no estás seguro pon 0.50 en lugar de 0."
     
     for intento in range(max_intentos):
@@ -459,7 +477,6 @@ if archivos:
                 st.write(f"- Año: {anio}")
                 st.write(f"- Valor facial: {valor}")
                 st.write(f"- Estado: {estado}")
-                # ✅ PRECIO EDITABLE: mínimo 0.50, si viene 0 se pone automáticamente
                 precio_num = st.number_input(
                     "Precio de venta en GBP",
                     value=max(precio_num, 0.5),
