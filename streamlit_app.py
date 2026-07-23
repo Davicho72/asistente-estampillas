@@ -120,13 +120,17 @@ def publicar_en_ebay(datos):
     if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]):
         return False, "Faltan claves de eBay o no se pudo generar el token"
 
-    # ✅ ARREGLO: LIMPIA Y CONVIERTE EL PRECIO CORRECTAMENTE
-    precio_texto = str(datos.get("sale_price_gbp", "0")).replace(",", ".").strip()
+    # ✅ LIMPIEZA TOTAL Y DEFINITIVA DEL PRECIO
     try:
-        precio_num = float(precio_texto)
+        # Convertir a texto, cambiar coma por punto, quitar espacios
+        precio_limpio = str(datos.get("sale_price_gbp", "0")).strip().replace(",", ".")
+        # Extraer solo el número por si hay letras
+        solo_numeros = re.sub(r"[^0-9.]", "", precio_limpio)
+        precio_num = float(solo_numeros)
     except:
         precio_num = 0.0
 
+    # ÚNICA comprobación: mayor que cero
     if precio_num <= 0:
         return False, "Precio en GBP no válido"
 
@@ -222,12 +226,13 @@ def publicar_desde_airtable():
             omitidos += 1
             continue
 
+        # Pasamos el valor tal cual — la limpieza la hace publicar_en_ebay
         datos = {
             "country": campos.get("country", "Desconocido"),
             "year": campos.get("year", ""),
             "face_value": campos.get("Face_value", ""),
             "condition": campos.get("condition", ""),
-            "sale_price_gbp": campos.get("sale_price_gbp", 0),
+            "sale_price_gbp": campos.get("sale_price_gbp", "0"),
             "description": campos.get("description", "")
         }
 
@@ -267,13 +272,18 @@ def guardar_seleccionadas(lista):
         guardados = 0
         for r in lista:
             fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
+            # Asegurar que se guarde como número
+            try:
+                precio_guardar = float(str(r.get("sale_price_gbp", 0)).replace(",", "."))
+            except:
+                precio_guardar = 0.0
             datos_limpios = {
                 "saved_date": fecha_formateada,
                 "country": str(r.get("country", "Unknown")),
                 "year": str(r.get("year", "Unknown")),
                 "Face_value": str(r.get("face_value", "Unknown")),
                 "condition": str(r.get("condition", "Unknown")),
-                "sale_price_gbp": float(r.get("sale_price_gbp", 0)),
+                "sale_price_gbp": precio_guardar,
                 "description": str(r.get("description", "No details")),
                 "Publicar en eBay": bool(r.get("publicar_en_ebay", False)),
                 "image_b64": str(r.get("image_b64", ""))
@@ -293,12 +303,13 @@ def publicar_seleccionadas(lista):
         return
     publicadas = 0
     for r in lista:
+        # Pasamos el valor tal cual — la limpieza la hace publicar_en_ebay
         datos = {
             "country": r.get("country", "Desconocido"),
             "year": r.get("year", ""),
             "face_value": r.get("face_value", ""),
             "condition": r.get("condition", ""),
-            "sale_price_gbp": r.get("sale_price_gbp", 0),
+            "sale_price_gbp": r.get("sale_price_gbp", "0"),
             "description": r.get("description", "")
         }
         ok, res = publicar_en_ebay(datos)
@@ -306,13 +317,17 @@ def publicar_seleccionadas(lista):
             st.success(f"✅ Publicado correctamente — ID eBay: {res}")
             if CONECTADO_AIRTABLE:
                 fecha_formateada = datetime.now().isoformat(timespec="seconds") + "Z"
+                try:
+                    precio_guardar = float(str(r.get("sale_price_gbp", 0)).replace(",", "."))
+                except:
+                    precio_guardar = 0.0
                 tabla_airtable.create({
                     "saved_date": fecha_formateada,
                     "country": r.get("country", "Unknown"),
                     "year": r.get("year", "Unknown"),
                     "Face_value": r.get("face_value", "Unknown"),
                     "condition": r.get("condition", "Unknown"),
-                    "sale_price_gbp": float(r.get("sale_price_gbp", 0)),
+                    "sale_price_gbp": precio_guardar,
                     "description": r.get("description", "No details"),
                     "Publicar en eBay": False,
                     "ID eBay": res,
