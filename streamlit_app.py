@@ -122,11 +122,11 @@ def publicar_en_ebay(datos):
         return False, "Faltan claves de eBay o no se pudo generar el token"
 
     try:
-        precio_limpio = str(datos.get("sale_price_gbp", "0")).strip().replace(",", ".")
-        solo_numeros = re.sub(r"[^0-9.]", "", precio_limpio)
-        precio_num = float(solo_numeros)
+        precio_texto = str(datos.get("sale_price_gbp", "0.5")).strip().replace(",", ".")
+        precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
+        precio_num = float(precio_solo_numeros) if precio_solo_numeros else 0.5
     except:
-        precio_num = 0.0
+        precio_num = 0.5
 
     if precio_num <= 0:
         return False, "Precio en GBP no válido"
@@ -231,7 +231,7 @@ def publicar_desde_airtable():
             "year": campos.get("year", ""),
             "face_value": campos.get("Face_value", ""),
             "condition": campos.get("condition", ""),
-            "sale_price_gbp": campos.get("sale_price_gbp", "0"),
+            "sale_price_gbp": campos.get("sale_price_gbp", "0.5"),
             "description": campos.get("description", "")
         }
         ok, res = publicar_en_ebay(datos)
@@ -264,8 +264,11 @@ def guardar_seleccionadas(lista):
         guardados=0
         for r in lista:
             fecha=datetime.now().isoformat(timespec="seconds")+"Z"
-            try: precio=float(str(r.get("sale_price_gbp",0)).replace(",","."))
-            except: precio=0.0
+            try: 
+                precio_texto = str(r.get("sale_price_gbp", "0.5")).strip().replace(",", ".")
+                precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
+                precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
+            except: precio=0.5
             tabla_airtable.create({
                 "saved_date":fecha,"country":r["country"],"year":r["year"],"Face_value":r["face_value"],
                 "condition":r["condition"],"sale_price_gbp":precio,"description":r["description"],
@@ -283,15 +286,18 @@ def publicar_seleccionadas(lista):
     for r in lista:
         datos={
             "country":r.get("country","Desconocido"),"year":r.get("year",""),"face_value":r.get("face_value",""),
-            "condition":r.get("condition",""),"sale_price_gbp":r.get("sale_price_gbp","0"),"description":r.get("description","")
+            "condition":r.get("condition",""),"sale_price_gbp":r.get("sale_price_gbp","0.5"),"description":r.get("description","")
         }
         ok,res=publicar_en_ebay(datos)
         if ok:
             st.success(f"✅ {res}")
             if CONECTADO_AIRTABLE:
                 fecha=datetime.now().isoformat(timespec="seconds")+"Z"
-                try: precio=float(str(r.get("sale_price_gbp",0)).replace(",","."))
-                except: precio=0.0
+                try:
+                    precio_texto = str(r.get("sale_price_gbp", "0.5")).strip().replace(",", ".")
+                    precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
+                    precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
+                except: precio=0.5
                 tabla_airtable.create({
                     "saved_date":fecha,"country":datos["country"],"year":datos["year"],"Face_value":datos["face_value"],
                     "condition":datos["condition"],"sale_price_gbp":precio,"description":datos["description"],
@@ -371,7 +377,10 @@ if archivos:
                 anio=d.get("year","-")
                 valor=d.get("face_value","-")
                 estado=d.get("condition","-")
-                precio=float(str(d.get("sale_price_gbp",0.5)).replace(",","."))
+                # LÍNEA CORREGIDA PARA EVITAR ERROR DE CONVERSIÓN
+                precio_texto = str(d.get("sale_price_gbp", "0.5")).strip().replace(",", ".")
+                precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
+                precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
                 desc=d.get("description","Sin detalles")
                 st.write(f"País:{pais} | Año:{anio} | Valor:{valor} | Estado:{estado}")
                 precio=st.number_input("Precio GBP",value=max(precio,0.5),min_value=0.5,step=0.05,format="%.2f",key=f"p{i}{n}")
