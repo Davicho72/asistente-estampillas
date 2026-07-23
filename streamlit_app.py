@@ -264,7 +264,7 @@ def guardar_seleccionadas(lista):
         guardados=0
         for r in lista:
             fecha=datetime.now().isoformat(timespec="seconds")+"Z"
-            try: 
+            try:
                 precio_texto = str(r.get("sale_price_gbp", "0.5")).strip().replace(",", ".")
                 precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
                 precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
@@ -339,7 +339,7 @@ def transcribir_audio(audio):
     os.remove("temp.wav")
     return llamar_mistral([{"role":"user","content":[{"type":"text","text":"Transcribe exactamente:"},{"type":"input_file","input_file":f"data:audio/wav;base64,{b}"}]}])
 
-# INTERFAZ
+# INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
 if CONECTADO_AIRTABLE: st.success("Conectado a Airtable")
 df=cargar_base_datos()
@@ -349,66 +349,135 @@ if "ver_catalogo"not in st.session_state: st.session_state.ver_catalogo=False
 st.header("🚀 Publicar desde Airtable")
 if st.button("🔍 Revisar y publicar"): publicar_desde_airtable()
 
-st.header("📤 Cargar estampillas")
-modo=st.radio("Modo",["📂 Galería","📸 Cámara"])
-archivos=[]
-if modo=="📂 Galería":
-    st.session_state.activar_camara=False
-    archivos=st.file_uploader("Imágenes",type=["jpg","png"],accept_multiple_files=True)
+st.header("📤 Cargar o tomar estampillas")
+modo = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
+archivos = []
+if modo == "📂 Galería":
+    st.session_state.activar_camara = False
+    archivos = st.file_uploader("Selecciona imágenes", type=["jpg","jpeg","png"], accept_multiple_files=True)
 else:
     if not st.session_state.activar_camara:
-        if st.button("📸 Abrir cámara"): st.session_state.activar_camara=True;st.rerun()
+        if st.button("📸 Abrir cámara"):
+            st.session_state.activar_camara = True
+            st.rerun()
     else:
-        foto=st.camera_input("Tomar foto")
-        if foto: archivos.append(foto)
-        if st.button("❌ Cerrar"): st.session_state.activar_camara=False;st.rerun()
+        foto = st.camera_input("Toma la estampilla")
+        if foto:
+            archivos.append(foto)
+        if st.button("❌ Cerrar cámara"):
+            st.session_state.activar_camara = False
+            st.rerun()
 
 if archivos:
-    guardar_lista=[];pub_lista=[]
-    for i,a in enumerate(archivos,1):
-        st.subheader(f"Imagen {i}")
-        img=Image.open(a);st.image(img,width=300)
-        with st.spinner("Analizando..."):
-            b64=reducir_imagen(img)
-            estampas=analizar_estampa(img,b64)
-            for n,d in enumerate(estampas,1):
-                st.subheader(f"Estampa {n}")
-                pais=d.get("country","Desconocido")
-                anio=d.get("year","-")
-                valor=d.get("face_value","-")
-                estado=d.get("condition","-")
-                # LÍNEA CORREGIDA PARA EVITAR ERROR DE CONVERSIÓN
-                precio_texto = str(d.get("sale_price_gbp", "0.5")).strip().replace(",", ".")
-                precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
-                precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
-                desc=d.get("description","Sin detalles")
-                st.write(f"País:{pais} | Año:{anio} | Valor:{valor} | Estado:{estado}")
-                precio=st.number_input("Precio GBP",value=max(precio,0.5),min_value=0.5,step=0.05,format="%.2f",key=f"p{i}{n}")
-                desc=st.text_area("Descripción",desc,key=f"d{i}{n}")
-                g=st.checkbox("Guardar",True,key=f"g{i}{n}")
-                p=st.checkbox("Publicar en eBay",False,key=f"pu{i}{n}")
-                dato={"country":pais,"year":anio,"face_value":valor,"condition":estado,"sale_price_gbp":precio,"description":desc,"publicar_en_ebay":p,"image_b64":b64}
-                if g: guardar_lista.append(dato)
-                if p: pub_lista.append(dato)
-    c1,c2=st.columns(2)
-    with c1:
-        if st.button("📥 Guardar todas"): guardar_seleccionadas(guardar_lista);df=cargar_base_datos()
-    with c2:
-        if st.button("📤 Publicar todas"): publicar_seleccionadas(pub_lista);df=cargar_base_datos()
+    seleccionadas_guardar = []
+    seleccionadas_publicar = []
+    for i, a in enumerate(archivos,1):
+        st.subheader(f"📷 Imagen {i}")
+        img = Image.open(a)
+        st.image(img, width=300)
+        with st.spinner("Analizando datos..."):
+            b64 = reducir_imagen(img)
+            estampas = analizar_estampa(img, b64)
+            st.success(f"{len(estampas)} estampillas detectadas:")
+            for n, d in enumerate(estampas,1):
+                st.subheader(f"Estampilla {n}")
+                pais = d.get("country") or d.get("Country") or "Desconocido"
+                anio = d.get("year") or d.get("Year") or "Desconocido"
+                valor = d.get("face_value") or d.get("Face_value") or "Desconocido"
+                estado = d.get("condition") or d.get("Condition") or "Desconocido"
+                precio = d.get("sale_price_gbp") or d.get("Sale_price_gbp") or 0.5
+                desc = d.get("description") or d.get("Description") or "Sin detalles"
 
-st.header("📚 Catálogo")
-if st.button("Ver/Ocultar"): st.session_state.ver_catalogo=not st.session_state.ver_catalogo
+                try:
+                    precio_texto = str(precio).strip().replace(",", ".")
+                    precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
+                    precio_num = float(precio_solo_numeros) if precio_solo_numeros else 0.5
+                except:
+                    precio_num = 0.5
+
+                st.write(f"- País: {pais}")
+                st.write(f"- Año: {anio}")
+                st.write(f"- Valor facial: {valor}")
+                st.write(f"- Estado: {estado}")
+                precio_num = st.number_input(
+                    "Precio de venta en GBP",
+                    value=max(precio_num, 0.5),
+                    min_value=0.5,
+                    step=0.05,
+                    format="%.2f",
+                    key=f"precio_{i}_{n}"
+                )
+                st.write(f"- Descripción: {desc}")
+                desc = st.text_area("Editar descripción", desc, key=f"desc_{i}_{n}")
+
+                guardar = st.checkbox(f"Guardar en Airtable", value=True, key=f"guardar_{i}_{n}")
+                publicar = st.checkbox(f"Marcar para eBay", value=False, key=f"publicar_{i}_{n}")
+
+                datos_estampa = {
+                    "country": pais, "year": anio, "face_value": valor,
+                    "condition": estado, "sale_price_gbp": precio_num,
+                    "description": desc, "publicar_en_ebay": publicar, "image_b64": b64
+                }
+                if guardar:
+                    seleccionadas_guardar.append(datos_estampa)
+                if publicar:
+                    seleccionadas_publicar.append(datos_estampa)
+
+    st.divider()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📥 Guardar seleccionadas en Airtable"):
+            guardar_seleccionadas(seleccionadas_guardar)
+            df = cargar_base_datos()
+    with col2:
+        if st.button("📤 Publicar seleccionadas en eBay"):
+            publicar_seleccionadas(seleccionadas_publicar)
+            df = cargar_base_datos()
+
+st.header("📚 Catálogo guardado")
+if st.button("Ver / Ocultar catálogo"):
+    st.session_state.ver_catalogo = not st.session_state.ver_catalogo
 if st.session_state.ver_catalogo and not df.empty:
-    m=df.copy()
-    m["sale_price_gbp"]=m["sale_price_gbp"].apply(lambda x:f"£{x:.2f}")
-    m["Publicar en eBay"]=m["Publicar en eBay"].apply(lambda x:"✅ Sí"if x else"❌ No")
-    st.dataframe(m,hide_index=True)
+    m = df.copy()
+    m["sale_price_gbp"] = m["sale_price_gbp"].apply(lambda x: f"£{x:.2f} GBP")
+    m["Publicar en eBay"] = m["Publicar en eBay"].apply(lambda x: "✅ Sí" if x else "❌ No")
+    m["Imagen"] = m["image_b64"].apply(lambda x: f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
+    st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","Publicar en eBay","ID eBay","description","Imagen"]],
+        column_config={"Imagen": st.column_config.ImageColumn(width="small")}, hide_index=True)
 
-st.header("💬 Consultas")
-pregunta=st.text_area("Escribe tu duda")
-if st.button("Enviar") and pregunta:
-    with st.spinner("..."):
-        r=llamar_mistral([{"role":"user","content":f"Sobre estampillas: {pregunta}"}])
-        st.write(r)
+st.header("🌍 Buscar compradores y contactos")
+if st.button("Buscar ahora"):
+    if df.empty:
+        st.warning("Primero carga y guarda al menos una estampilla.")
+    else:
+        with st.spinner("Obteniendo datos..."):
+            try:
+                respuesta = llamar_mistral([{
+                    "role":"user",
+                    "content":"Muestra SOLO datos exactos y completos de casas de subastas, tiendas y sitios de venta de estampillas: nombre oficial completo, página web oficial, todos los correos electrónicos con su uso específico, dirección postal completa, exactamente a quién le vendes tus estampillas y cómo comunicarte con ellos. Sin explicaciones innecesarias, sin términos vagos, solo información concreta actualizada al 2026."
+                }], temperatura=0.1, max_tokens=1500)
+                st.success("Datos exactos obtenidos:")
+                st.markdown(respuesta)
+            except Exception as e:
+                st.error(f"No se pudo consultar: {str(e)}")
 
-st.download_button("📥 Descargar CSV",data=df.drop(columns=["image_b64"]).to_csv(index=False).encode(),file_name="catalogo.csv")
+st.header("💬 Otras consultas")
+entrada = st.radio("¿Cómo preguntas?", ["✍️ Texto", "🎤 Voz"])
+pregunta = ""
+if entrada == "✍️ Texto":
+    pregunta = st.text_area("Escribe tu consulta", height=80)
+else:
+    audio = st.audio_input("Graba tu mensaje")
+    if audio:
+        pregunta = transcribir_audio(audio)
+        st.write(f"Transcripción: {pregunta}")
+
+if st.button("Enviar consulta") and pregunta:
+    with st.spinner("Procesando..."):
+        respuesta = llamar_mistral([{"role":"user","content":f"Responde sobre estampillas: {pregunta}"}], temperatura=0.7, max_tokens=600)
+        st.success("Respuesta:")
+        st.write(respuesta)
+
+st.download_button("📥 Descargar CSV",
+    data=df.drop(columns=["image_b64"]).to_csv(index=False).encode("utf-8"),
+    file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv")
