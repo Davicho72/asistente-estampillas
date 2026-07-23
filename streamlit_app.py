@@ -93,13 +93,14 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
 EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID") or os.getenv("EBAY_APP_ID", "")
 EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET") or os.getenv("EBAY_CERT_ID", "")
 EBAY_DEV_ID = st.secrets.get("EBAY_RUNAME") or os.getenv("EBAY_DEV_ID", "")
+EBAY_REFRESH_TOKEN = st.secrets.get("EBAY_REFRESH_TOKEN") or os.getenv("EBAY_REFRESH_TOKEN", "")
 EBAY_SITIO = "3"
 CATEGORIA_EBAY = "260"
 MONEDA_EBAY = "GBP"
 CAMPO_PUBLICAR = "Publicar en eBay"
 
 def obtener_token_ebay():
-    if not EBAY_APP_ID or not EBAY_CERT_ID:
+    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN]):
         return None
     creds = f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()
     auth_b64 = base64.b64encode(creds).decode()
@@ -107,7 +108,7 @@ def obtener_token_ebay():
         "Authorization": f"Basic {auth_b64}",
         "Content-Type": "application/x-www-form-urlencoded"
     }
-    datos = "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope"
+    datos = f"grant_type=refresh_token&refresh_token={EBAY_REFRESH_TOKEN}&scope=https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.item https://api.ebay.com/oauth/api_scope/sell.account"
     try:
         resp = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=cabeceras, data=datos, timeout=30)
         resp.raise_for_status()
@@ -138,7 +139,7 @@ def publicar_en_ebay(datos):
         "X-EBAY-API-DEV-NAME": EBAY_DEV_ID,
         "X-EBAY-API-CERT-NAME": EBAY_CERT_ID,
         "X-EBAY-API-SITEID": EBAY_SITIO,
-        "X-EBAY-API-COMPATIBILITY-LEVEL": "967",  # ✅ LÍNEA QUE FALTABA
+        "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
         "Authorization": f"Bearer {EBAY_TOKEN}",
         "Content-Type": "text/xml"
     }
