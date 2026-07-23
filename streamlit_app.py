@@ -58,7 +58,7 @@ img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 """, unsafe_allow_html=True)
 
 # 🔧 API MISTRAL (FRANCIA)
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+MISTRAL_API_KEY = st.secrets.get("MISTRAL_API_KEY") or os.getenv("MISTRAL_API_KEY")
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = "pixtral-12b-2409"
 
@@ -90,18 +90,36 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
         return f"Error conexión: {str(e)}"
 
 # 🔧 CONFIGURACIÓN EBAY Y PUBLICACIÓN
-EBAY_APP_ID = os.getenv("EBAY_APP_ID", "")
-EBAY_CERT_ID = os.getenv("EBAY_CERT_ID", "")
-EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
-EBAY_TOKEN = os.getenv("EBAY_TOKEN", "")
+# ✅ LEE SOLO DE SECRETS Y GENERA EL TOKEN AUTOMÁTICAMENTE
+EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID") or os.getenv("EBAY_APP_ID", "")
+EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET") or os.getenv("EBAY_CERT_ID", "")
+EBAY_DEV_ID = st.secrets.get("EBAY_RUNAME") or os.getenv("EBAY_DEV_ID", "")
 EBAY_SITIO = "3"
 CATEGORIA_EBAY = "260"
 MONEDA_EBAY = "GBP"
 CAMPO_PUBLICAR = "Publicar en eBay"
 
+def obtener_token_ebay():
+    if not EBAY_APP_ID or not EBAY_CERT_ID:
+        return None
+    creds = f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()
+    auth_b64 = base64.b64encode(creds).decode()
+    cabeceras = {
+        "Authorization": f"Basic {auth_b64}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    datos = "grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope"
+    try:
+        resp = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=cabeceras, data=datos, timeout=30)
+        resp.raise_for_status()
+        return resp.json()["access_token"]
+    except Exception:
+        return None
+
 def publicar_en_ebay(datos):
+    EBAY_TOKEN = obtener_token_ebay()
     if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]):
-        return False, "Faltan claves de eBay"
+        return False, "Faltan claves de eBay o no se pudo generar el token"
     if not datos.get("sale_price_gbp") or datos.get("sale_price_gbp") <= 0:
         return False, "Precio en GBP no válido"
 
@@ -165,8 +183,11 @@ Envío seguro y rápido desde Reino Unido."""
 # CONEXIÓN A AIRTABLE
 CONECTADO_AIRTABLE = False
 try:
-    api_airtable = Api(os.getenv("AIRTABLE_API_KEY"))
-    tabla_airtable = api_airtable.table(os.getenv("AIRTABLE_BASE_ID"), os.getenv("AIRTABLE_TABLA"))
+    api_airtable = Api(st.secrets.get("AIRTABLE_API_KEY") or os.getenv("AIRTABLE_API_KEY"))
+    tabla_airtable = api_airtable.table(
+        st.secrets.get("AIRTABLE_BASE_ID") or os.getenv("AIRTABLE_BASE_ID"),
+        st.secrets.get("AIRTABLE_TABLA") or os.getenv("AIRTABLE_TABLA")
+    )
     CONECTADO_AIRTABLE = True
 except Exception:
     pass
@@ -176,7 +197,7 @@ def publicar_desde_airtable():
     if not CONECTADO_AIRTABLE:
         st.warning("Sin conexión a Airtable")
         return
-    if not all([EBAY_APP_ID, EBAY_TOKEN]):
+    if not EBAY_APP_ID or not EBAY_CERT_ID:
         st.warning("Completa las claves de eBay primero")
         return
 
@@ -257,7 +278,7 @@ def guardar_seleccionadas(lista):
         st.error(f"Error al guardar: {str(e)}")
 
 def publicar_seleccionadas(lista):
-    if not all([EBAY_APP_ID, EBAY_TOKEN]):
+    if not EBAY_APP_ID or not EBAY_CERT_ID:
         st.warning("Completa las claves de eBay primero.")
         return
     if not lista:
