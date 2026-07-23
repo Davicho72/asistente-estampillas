@@ -90,7 +90,6 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
         return f"Error conexión: {str(e)}"
 
 # 🔧 CONFIGURACIÓN EBAY Y PUBLICACIÓN
-# ✅ LEE SOLO DE SECRETS Y GENERA EL TOKEN AUTOMÁTICAMENTE
 EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID") or os.getenv("EBAY_APP_ID", "")
 EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET") or os.getenv("EBAY_CERT_ID", "")
 EBAY_DEV_ID = st.secrets.get("EBAY_RUNAME") or os.getenv("EBAY_DEV_ID", "")
@@ -120,7 +119,15 @@ def publicar_en_ebay(datos):
     EBAY_TOKEN = obtener_token_ebay()
     if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]):
         return False, "Faltan claves de eBay o no se pudo generar el token"
-    if not datos.get("sale_price_gbp") or datos.get("sale_price_gbp") <= 0:
+
+    # ✅ ARREGLO: LIMPIA Y CONVIERTE EL PRECIO CORRECTAMENTE
+    precio_texto = str(datos.get("sale_price_gbp", "0")).replace(",", ".").strip()
+    try:
+        precio_num = float(precio_texto)
+    except:
+        precio_num = 0.0
+
+    if precio_num <= 0:
         return False, "Precio en GBP no válido"
 
     url = "https://api.ebay.com/ws/api.dll"
@@ -151,7 +158,7 @@ Envío seguro y rápido desde Reino Unido."""
             <Title>{titulo}</Title>
             <Description>{descripcion}</Description>
             <Category>{CATEGORIA_EBAY}</Category>
-            <StartPrice currencyID="{MONEDA_EBAY}">{datos['sale_price_gbp']}</StartPrice>
+            <StartPrice currencyID="{MONEDA_EBAY}">{precio_num}</StartPrice>
             <Quantity>1</Quantity>
             <ListingDuration>GTC</ListingDuration>
             <Country>GB</Country>
@@ -220,7 +227,7 @@ def publicar_desde_airtable():
             "year": campos.get("year", ""),
             "face_value": campos.get("Face_value", ""),
             "condition": campos.get("condition", ""),
-            "sale_price_gbp": float(campos.get("sale_price_gbp", 0)) or 0,
+            "sale_price_gbp": campos.get("sale_price_gbp", 0),
             "description": campos.get("description", "")
         }
 
@@ -291,7 +298,7 @@ def publicar_seleccionadas(lista):
             "year": r.get("year", ""),
             "face_value": r.get("face_value", ""),
             "condition": r.get("condition", ""),
-            "sale_price_gbp": float(r.get("sale_price_gbp", 0)),
+            "sale_price_gbp": r.get("sale_price_gbp", 0),
             "description": r.get("description", "")
         }
         ok, res = publicar_en_ebay(datos)
