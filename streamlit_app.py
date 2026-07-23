@@ -27,25 +27,11 @@ if not st.session_state.autenticado:
         st.error("❌ Contraseña incorrecta")
     st.stop()
 
-# 🔍 COMPROBACIÓN INMEDIATA DE CLAVES
+# 🔧 LECTURA DE CLAVES (YA NO SE MUESTRA EN PANTALLA)
 EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID", "")
 EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET", "")
 EBAY_DEV_ID = st.secrets.get("EBAY_DEV_ID", "")
 EBAY_REFRESH_TOKEN = st.secrets.get("EBAY_REFRESH_TOKEN", "")
-
-st.subheader("🔍 LO QUE REALMENTE LEE LA APP:")
-st.write("EBAY_CLIENT_ID:", "✅ CARGADO" if EBAY_APP_ID else "❌ VACÍO")
-st.write("EBAY_CLIENT_SECRET:", "✅ CARGADO" if EBAY_CERT_ID else "❌ VACÍO")
-st.write("EBAY_DEV_ID:", "✅ CARGADO" if EBAY_DEV_ID else "❌ VACÍO")
-st.write("EBAY_REFRESH_TOKEN:", "✅ CARGADO" if EBAY_REFRESH_TOKEN else "❌ VACÍO")
-
-st.write("📝 Primeros 15 caracteres de cada uno:")
-st.code(f"""
-EBAY_CLIENT_ID: {EBAY_APP_ID[:15]}...
-EBAY_CLIENT_SECRET: {EBAY_CERT_ID[:15]}...
-EBAY_DEV_ID: {EBAY_DEV_ID[:15]}...
-EBAY_REFRESH_TOKEN: {EBAY_REFRESH_TOKEN[:15]}...
-""")
 
 # CONFIGURACIÓN GENERAL
 st.set_page_config(
