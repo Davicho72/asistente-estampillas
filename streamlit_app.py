@@ -138,6 +138,7 @@ def publicar_en_ebay(datos):
         "X-EBAY-API-DEV-NAME": EBAY_DEV_ID,
         "X-EBAY-API-CERT-NAME": EBAY_CERT_ID,
         "X-EBAY-API-SITEID": EBAY_SITIO,
+        "X-EBAY-API-COMPATIBILITY-LEVEL": "967",  # ✅ LÍNEA QUE FALTABA
         "Authorization": f"Bearer {EBAY_TOKEN}",
         "Content-Type": "text/xml"
     }
@@ -177,15 +178,12 @@ Envío seguro y rápido desde Reino Unido."""
     try:
         resp = requests.post(url, data=xml.encode("utf-8"), headers=cabeceras, timeout=60)
 
-        # ✅ CORRECCIÓN: el código 200 es éxito, no error
         if resp.status_code != 200:
             return False, f"Error HTTP {resp.status_code}: {resp.text[:250]}"
 
-        # Leer respuesta con el espacio de nombres oficial de eBay
         ns = {"ebay": "urn:ebay:apis:eBLBaseComponents"}
         raiz = ET.fromstring(resp.text)
 
-        # Buscar errores reales
         errores = raiz.findall("ebay:Errors", ns)
         if errores:
             mensajes = []
@@ -196,12 +194,10 @@ Envío seguro y rápido desde Reino Unido."""
                     mensajes.append(f"{cod.text if cod else ''} → {msg.text}")
             return False, " | ".join(mensajes[:2])
 
-        # Buscar ID del anuncio
         id_anuncio = raiz.find("ebay:ItemID", ns)
         if id_anuncio is not None and id_anuncio.text:
             return True, f"✅ Publicado | ID: {id_anuncio.text}"
 
-        # Si llega aquí: respuesta correcta, sin errores
         return True, "✅ Publicado correctamente (revisa tu cuenta eBay)"
 
     except Exception as e:
@@ -298,7 +294,7 @@ def guardar_seleccionadas(lista):
                 "Face_value": str(r.get("face_value", "Unknown")),
                 "condition": str(r.get("condition", "Unknown")),
                 "sale_price_gbp": precio_guardar,
-                "description": str(r.get("description", "No details")),
+                "description": str(r.get("description", "No detalles")),
                 "Publicar en eBay": bool(r.get("publicar_en_ebay", False)),
                 "image_b64": str(r.get("image_b64", ""))
             }
@@ -341,7 +337,7 @@ def publicar_seleccionadas(lista):
                     "Face_value": r.get("face_value", "Unknown"),
                     "condition": r.get("condition", "Unknown"),
                     "sale_price_gbp": precio_guardar,
-                    "description": r.get("description", "No details"),
+                    "description": r.get("description", "Sin detalles"),
                     "Publicar en eBay": False,
                     "ID eBay": res,
                     "image_b64": r.get("image_b64", "")
