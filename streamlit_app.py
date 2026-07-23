@@ -89,10 +89,10 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-# 🔧 CONFIGURACIÓN EBAY
-EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID") or os.getenv("EBAY_APP_ID", "")
-EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET") or os.getenv("EBAY_CERT_ID", "")
-EBAY_DEV_ID = st.secrets.get("EBAY_RUNAME") or os.getenv("EBAY_DEV_ID", "")
+# 🔧 CONFIGURACIÓN EBAY (ADAPTADO A TUS NOMBRES EN SECRETOS)
+EBAY_APP_ID = st.secrets.get("EBAY_APP_ID") or os.getenv("EBAY_APP_ID", "")
+EBAY_CERT_ID = st.secrets.get("EBAY_CERT_ID") or os.getenv("EBAY_CERT_ID", "")
+EBAY_DEV_ID = st.secrets.get("EBAY_DEV_ID") or os.getenv("EBAY_DEV_ID", "")
 EBAY_REFRESH_TOKEN = st.secrets.get("EBAY_REFRESH_TOKEN") or os.getenv("EBAY_REFRESH_TOKEN", "")
 EBAY_SITIO = "3"
 CATEGORIA_EBAY = "260"
