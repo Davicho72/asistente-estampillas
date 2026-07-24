@@ -284,11 +284,12 @@ def guardar_seleccionadas(lista):
                 precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
             except: precio=0.5
 
-            # ✅ ARREGLO EXACTO PARA EL CAMPO YEAR
+            # Limpieza segura del año
             anio_bruto = r.get("year", "")
             anio_limpio = str(anio_bruto).strip() if anio_bruto not in (None, "", "-") else ""
 
-            tabla_airtable.create({
+            # 1. Creamos registro primero
+            registro = tabla_airtable.create({
                 "saved_date":fecha,
                 "country":r["country"],
                 "year": anio_limpio,
@@ -298,7 +299,23 @@ def guardar_seleccionadas(lista):
                 "description":r["description"],
                 "Publicar en eBay":False,
                 "image_b64":r["image_b64"]
-            }, typecast=True) # ✅ AGREGADO PARA EVITAR ERRORES DE TIPO
+            }, typecast=True)
+
+            # 2. Subimos imagen al campo Adjunto "Imagen"
+            img_b64 = r.get("image_b64")
+            if img_b64:
+                try:
+                    datos_bin = base64.b64decode(img_b64)
+                    tabla_airtable.upload_attachment(
+                        record_id=registro["id"],
+                        field="Imagen",
+                        filename="estampilla.jpg",
+                        content=datos_bin,
+                        content_type="image/jpeg"
+                    )
+                except Exception as e:
+                    st.warning(f"Imagen guardada en código, no en vista: {str(e)}")
+
             guardados+=1
         st.success(f"Guardadas:{guardados}")
     except Exception as e: st.error(f"Error:{str(e)}")
@@ -309,7 +326,6 @@ def publicar_seleccionadas(lista):
         return
     publicadas=0
     for r in lista:
-        # ✅ ARREGLO EXACTO PARA EL CAMPO YEAR
         anio_bruto = r.get("year", "")
         anio_limpio = str(anio_bruto).strip() if anio_bruto not in (None, "", "-") else ""
 
@@ -342,7 +358,7 @@ def publicar_seleccionadas(lista):
                     "Publicar en eBay":False,
                     "ID eBay":res,
                     "image_b64":r["image_b64"]
-                }, typecast=True) # ✅ AGREGADO PARA EVITAR ERRORES DE TIPO
+                }, typecast=True)
             publicadas+=1
         else: st.warning(f"No publicado:{res}")
     st.info(f"Publicadas:{publicadas}")
