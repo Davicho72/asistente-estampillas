@@ -27,7 +27,7 @@ if not st.session_state.autenticado:
         st.error("❌ Contraseña incorrecta")
     st.stop()
 
-# 🔧 LECTURA DE CLAVES (YA NO SE MUESTRA EN PANTALLA)
+# 🔧 LECTURA DE CLAVES
 EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID", "")
 EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET", "")
 EBAY_DEV_ID = st.secrets.get("EBAY_DEV_ID", "")
@@ -95,7 +95,7 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-# 🔧 CONFIGURACIÓN Y FUNCIÓN DE TOKEN EBAY (CORREGIDA)
+# 🔧 CONFIGURACIÓN Y FUNCIÓN DE TOKEN EBAY
 EBAY_SITIO = "3"
 CATEGORIA_EBAY = "260"
 MONEDA_EBAY = "GBP"
@@ -283,11 +283,22 @@ def guardar_seleccionadas(lista):
                 precio_solo_numeros = re.sub(r"[^0-9.]", "", precio_texto)
                 precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
             except: precio=0.5
+
+            # ✅ ARREGLO EXACTO PARA EL CAMPO YEAR
+            anio_bruto = r.get("year", "")
+            anio_limpio = str(anio_bruto).strip() if anio_bruto not in (None, "", "-") else ""
+
             tabla_airtable.create({
-                "saved_date":fecha,"country":r["country"],"year":r["year"],"Face_value":r["face_value"],
-                "condition":r["condition"],"sale_price_gbp":precio,"description":r["description"],
-                "Publicar en eBay":False,"image_b64":r["image_b64"]
-            })
+                "saved_date":fecha,
+                "country":r["country"],
+                "year": anio_limpio,
+                "Face_value":r["face_value"],
+                "condition":r["condition"],
+                "sale_price_gbp":precio,
+                "description":r["description"],
+                "Publicar en eBay":False,
+                "image_b64":r["image_b64"]
+            }, typecast=True) # ✅ AGREGADO PARA EVITAR ERRORES DE TIPO
             guardados+=1
         st.success(f"Guardadas:{guardados}")
     except Exception as e: st.error(f"Error:{str(e)}")
@@ -298,9 +309,17 @@ def publicar_seleccionadas(lista):
         return
     publicadas=0
     for r in lista:
+        # ✅ ARREGLO EXACTO PARA EL CAMPO YEAR
+        anio_bruto = r.get("year", "")
+        anio_limpio = str(anio_bruto).strip() if anio_bruto not in (None, "", "-") else ""
+
         datos={
-            "country":r.get("country","Desconocido"),"year":r.get("year",""),"face_value":r.get("face_value",""),
-            "condition":r.get("condition",""),"sale_price_gbp":r.get("sale_price_gbp","0.5"),"description":r.get("description","")
+            "country":r.get("country","Desconocido"),
+            "year": anio_limpio,
+            "face_value":r.get("face_value",""),
+            "condition":r.get("condition",""),
+            "sale_price_gbp":r.get("sale_price_gbp","0.5"),
+            "description":r.get("description","")
         }
         ok,res=publicar_en_ebay(datos)
         if ok:
@@ -313,10 +332,17 @@ def publicar_seleccionadas(lista):
                     precio = float(precio_solo_numeros) if precio_solo_numeros else 0.5
                 except: precio=0.5
                 tabla_airtable.create({
-                    "saved_date":fecha,"country":datos["country"],"year":datos["year"],"Face_value":datos["face_value"],
-                    "condition":datos["condition"],"sale_price_gbp":precio,"description":datos["description"],
-                    "Publicar en eBay":False,"ID eBay":res,"image_b64":r["image_b64"]
-                })
+                    "saved_date":fecha,
+                    "country":datos["country"],
+                    "year": anio_limpio,
+                    "Face_value":datos["face_value"],
+                    "condition":datos["condition"],
+                    "sale_price_gbp":precio,
+                    "description":datos["description"],
+                    "Publicar en eBay":False,
+                    "ID eBay":res,
+                    "image_b64":r["image_b64"]
+                }, typecast=True) # ✅ AGREGADO PARA EVITAR ERRORES DE TIPO
             publicadas+=1
         else: st.warning(f"No publicado:{res}")
     st.info(f"Publicadas:{publicadas}")
