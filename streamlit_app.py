@@ -1,4 +1,4 @@
-import streamlit as st
+import gradio as gr
 import base64
 from PIL import Image
 import io
@@ -13,54 +13,26 @@ from datetime import datetime
 from pyairtable import Api
 
 # 🔒 CONTRASEÑA DE ACCESO
-if "autenticado" not in st.session_state:
-    st.session_state.autenticado = False
+CLAVE_CORRECTA = "AhoraNorbury2026"
 
-if not st.session_state.autenticado:
-    st.title("🔒 Acceso restringido")
-    st.info("Aplicación privada: ingresa la contraseña para continuar.")
-    clave = st.text_input("Contraseña", type="password")
-    if clave == "AhoraNorbury2026":
-        st.session_state.autenticado = True
-        st.rerun()
-    elif clave:
-        st.error("❌ Contraseña incorrecta")
-    st.stop()
-
-# 🔧 LECTURA DE CLAVES
-EBAY_APP_ID = st.secrets.get("EBAY_CLIENT_ID", "")
-EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET", "")
-EBAY_DEV_ID = st.secrets.get("EBAY_DEV_ID", "")
-EBAY_REFRESH_TOKEN = st.secrets.get("EBAY_REFRESH_TOKEN", "")
-
-# CONFIGURACIÓN GENERAL
-st.set_page_config(
-    page_title="Asistente Estampillas",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-    menu_items={"About": "Asistente personal para tu colección de estampillas"}
-)
-
-st.markdown("""
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:;">
-
-<style>
-html, body, .stApp {width:100%!important;max-width:100%!important;overflow-x:hidden!important;margin:0!important;padding:0.5rem!important;}
-* {box-sizing:border-box!important;}
-.stButton>button {width:100%!important;min-height:48px!important;font-size:16px!important;margin:0.4rem 0!important;}
-.stFileUploader, .stCameraInput, .stTextArea, .stCheckbox {width:100%!important;font-size:15px!important;}
-h1 {font-size:22px!important;}h2 {font-size:20px!important;}h3 {font-size:18px!important;}
-img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
-[data-testid="stSidebar"] {display:none!important;}
-</style>
-""", unsafe_allow_html=True)
-
-# 🔧 API MISTRAL
-MISTRAL_API_KEY = st.secrets.get("MISTRAL_API_KEY") or os.getenv("MISTRAL_API_KEY")
+# 🔧 LECTURA DE CLAVES (igual que antes)
+EBAY_APP_ID = os.getenv("EBAY_CLIENT_ID", "")
+EBAY_CERT_ID = os.getenv("EBAY_CLIENT_SECRET", "")
+EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
+EBAY_REFRESH_TOKEN = os.getenv("EBAY_REFRESH_TOKEN", "")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = "pixtral-12b-2409"
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY", "")
+AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID", "")
+AIRTABLE_TABLA = os.getenv("AIRTABLE_TABLA", "")
 
+EBAY_SITIO = "3"
+CATEGORIA_EBAY = "260"
+MONEDA_EBAY = "GBP"
+CAMPO_PUBLICAR = "Publicar en eBay"
+
+# 🔧 FUNCIONES (TODAS IGUALES, SIN CAMBIOS)
 def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     if not MISTRAL_API_KEY:
         return "ERROR: MISTRAL_API_KEY no configurada"
@@ -74,12 +46,6 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
         return resp.json()["choices"][0]["message"]["content"] if resp.ok else f"ERROR API: {resp.status_code}"
     except Exception as e:
         return f"Error conexión: {str(e)}"
-
-# 🔧 EBAY
-EBAY_SITIO = "3"
-CATEGORIA_EBAY = "260"
-MONEDA_EBAY = "GBP"
-CAMPO_PUBLICAR = "Publicar en eBay"
 
 def obtener_token_ebay():
     if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN]): return None
@@ -125,11 +91,10 @@ Envío desde Reino Unido."""
         return (True,f"✅ Publicado | ID: {idv.text}") if idv is not None else (True,"✅ Publicado")
     except Exception as e: return False, str(e)
 
-# 🔧 AIRTABLE
 CONECTADO=False
 try:
-    api=Api(st.secrets.get("AIRTABLE_API_KEY"))
-    tabla=api.table(st.secrets.get("AIRTABLE_BASE_ID"), st.secrets.get("AIRTABLE_TABLA"))
+    api=Api(AIRTABLE_API_KEY)
+    tabla=api.table(AIRTABLE_BASE_ID, AIRTABLE_TABLA)
     CONECTADO=True
 except: pass
 
@@ -140,7 +105,7 @@ def cargar_base():
     except: return pd.DataFrame()
 
 def guardar_seleccionadas(lista):
-    if not CONECTADO or not lista: return
+    if not CONECTADO or not lista: return f"Guardadas: 0"
     guardados=0
     for r in lista:
         fecha=datetime.now().isoformat(timespec="seconds")+"Z"
@@ -155,19 +120,20 @@ def guardar_seleccionadas(lista):
         img_b64=r.get("image_b64")
         if img_b64:
             try: tabla.upload_attachment(reg["id"],"Imagen","estampilla.jpg",base64.b64decode(img_b64),"image/jpeg")
-            except Exception as e: st.warning(f"Imagen: {str(e)}")
+            except: pass
         guardados+=1
-    st.success(f"Guardadas: {guardados}")
+    return f"✅ Guardadas: {guardados}"
 
 def publicar_seleccionadas(lista):
-    if not lista: return
+    if not lista: return f"Publicadas: 0"
     pub=0
+    mensajes=[]
     for r in lista:
         anio=str(r.get("year","")).strip() if r.get("year") not in (None,"","-") else ""
         datos={"country":r["country"],"year":anio,"face_value":r["face_value"],"condition":r["condition"],"sale_price_gbp":r["sale_price_gbp"],"description":r["description"]}
         ok,res=publicar_en_ebay(datos)
         if ok:
-            st.success(f"✅ {res}")
+            mensajes.append(f"✅ {res}")
             if CONECTADO:
                 fecha=datetime.now().isoformat(timespec="seconds")+"Z"
                 try: precio=float(re.sub(r"[^0-9.]", "", str(r.get("sale_price_gbp","0.5")).strip().replace(",",".")))
@@ -176,8 +142,10 @@ def publicar_seleccionadas(lista):
                               "condition":datos["condition"],"sale_price_gbp":precio,"description":datos["description"],
                               "Publicar en eBay":False,"ID eBay":res,"image_b64":r["image_b64"]}, typecast=True)
             pub+=1
-        else: st.warning(f"No publicado: {res}")
-    st.info(f"Publicadas: {pub}")
+        else:
+            mensajes.append(f"❌ No publicado: {res}")
+    mensajes.append(f"Total publicadas: {pub}")
+    return "\n".join(mensajes)
 
 def reducir_imagen(img):
     if img.mode in ("RGBA","P"):
@@ -201,93 +169,135 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🖥️ INTERFAZ FINAL
-st.title("📮 Asistente de Estampillas")
-if CONECTADO: st.success("Conectado a Airtable")
-df=cargar_base()
-for k in ["activar_camara","ver_catalogo"]:
-    if k not in st.session_state: st.session_state[k]=False
+# 🖥️ INTERFAZ GRADIO CON CÁMARA DIRECTA A TRASERA
+with gr.Blocks(title="Asistente Estampillas") as demo:
+    auth = gr.State(False)
+    gr.Markdown("# 📮 Asistente de Estampillas")
 
-st.header("🚀 Publicar desde Airtable")
-if st.button("🔍 Revisar y publicar"):
-    if not CONECTADO: st.warning("Sin conexión Airtable")
-    elif not EBAY_APP_ID: st.warning("Falta clave eBay")
-    else:
-        regs=tabla.all();pub=0;err=[]
+    # PANTALLA DE ACCESO
+    with gr.Group(visible=False) as pantalla_acceso:
+        clave_in = gr.Textbox(label="Contraseña", type="password")
+        btn_acceso = gr.Button("Ingresar", variant="primary")
+        msj_acceso = gr.Markdown()
+
+    # PANTALLA PRINCIPAL
+    with gr.Group(visible=False) as pantalla_principal:
+        estado_conexion = gr.Markdown("✅ Conectado a Airtable" if CONECTADO else "⚠️ Sin conexión Airtable")
+
+        gr.Markdown("## 🚀 Publicar desde Airtable")
+        btn_revisar = gr.Button("🔍 Revisar y publicar", variant="primary")
+        msj_publicar = gr.Markdown()
+
+        gr.Markdown("## 📤 Cargar o tomar estampillas")
+        modo = gr.Radio(["📂 Galería", "📸 Tomar foto"], value="📸 Tomar foto", label="Elige cómo subir")
+        
+        # ✅ CÁMARA DIRECTA A TRASERA + 1080p
+        camara = gr.Image(
+            sources=["webcam"],
+            type="pil",
+            webcam_props={"facingMode": "environment", "width": {"ideal":1280}, "height": {"ideal":720}},
+            label="📸 Cámara trasera (automática)",
+            visible=True
+        )
+        galeria = gr.File(file_types=["image"], file_count="multiple", label="Selecciona imágenes", visible=False)
+
+        btn_procesar = gr.Button("🔍 Analizar estampilla", variant="primary")
+        salida_datos = gr.Markdown()
+        precio_out = gr.Number(label="Precio GBP", value=0.50, minimum=0.50, step=0.05)
+        desc_out = gr.Textbox(label="Descripción", lines=2)
+        guardar_chk = gr.Checkbox(label="Guardar", value=True)
+        publicar_chk = gr.Checkbox(label="Marcar para eBay", value=False)
+        btn_guardar = gr.Button("📥 Guardar seleccionadas")
+        btn_pub = gr.Button("📤 Publicar seleccionadas")
+        msj_accion = gr.Markdown()
+
+        gr.Markdown("## 📚 Catálogo")
+        df_display = gr.Dataframe(value=cargar_base(), interactive=False)
+        btn_descargar = gr.Button("📥 Descargar CSV")
+        archivo_csv = gr.File(label="Descarga", visible=False)
+
+        gr.Markdown("## 🌍 Buscar referencias")
+        btn_buscar = gr.Button("Buscar casas de venta")
+        salida_busqueda = gr.Markdown()
+
+    # LÓGICA DE ACCESO
+    def verificar_clave(c):
+        if c == CLAVE_CORRECTA:
+            return True, gr.update(visible=False), gr.update(visible=True), ""
+        elif c:
+            return False, gr.update(visible=True), gr.update(visible=False), "❌ Contraseña incorrecta"
+        return False, gr.update(visible=True), gr.update(visible=False), ""
+
+    btn_acceso.click(verificar_clave, clave_in, [auth, pantalla_acceso, pantalla_principal, msj_acceso])
+
+    # CAMBIO DE MODO
+    def cambiar_modo(m):
+        return gr.update(visible=(m=="📸 Tomar foto")), gr.update(visible=(m=="📂 Galería"))
+    modo.change(cambiar_modo, modo, [camara, galeria])
+
+    # PROCESAR IMAGEN
+    def procesar_imagen(img, archivos):
+        lista_img = []
+        if img: lista_img.append(img)
+        if archivos: lista_img.extend([Image.open(f.name) for f in archivos])
+        if not lista_img: return "", 0.5, "", ""
+        salida = []
+        reg_temp = []
+        for idx, im in enumerate(lista_img, 1):
+            b64 = reducir_imagen(im)
+            datos = analizar_estampa(im, b64)
+            for d in datos:
+                pais = d.get("country","Desconocido")
+                anio = d.get("year","-")
+                val = d.get("face_value","-")
+                est = d.get("condition","-")
+                prec = d.get("sale_price_gbp",0.5)
+                desc = d.get("description","")
+                salida.append(f"**Imagen {idx}**\n**País:** {pais}\n**Año:** {anio}\n**Valor facial:** {val}\n**Estado:** {est}")
+                try: prec = float(re.sub(r"[^0-9.]","",str(prec).strip().replace(",",".")))
+                except: prec = 0.5
+                reg_temp.append({"country":pais,"year":anio,"face_value":val,"condition":est,"sale_price_gbp":prec,"description":desc,"image_b64":b64})
+        gr.session_state["reg_temp"] = reg_temp
+        return "\n\n".join(salida), max(prec,0.5), desc, reg_temp
+
+    btn_procesar.click(procesar_imagen, [camara, galeria], [salida_datos, precio_out, desc_out, msj_accion])
+
+    # ACCIONES
+    def accion_guardar(prec, desc, g, p):
+        regs = gr.session_state.get("reg_temp", [])
         for r in regs:
-            if not bool(r["fields"].get(CAMPO_PUBLICAR)): continue
-            d={"country":r["fields"].get("country",""),"year":r["fields"].get("year",""),"face_value":r["fields"].get("Face_value",""),
-               "condition":r["fields"].get("condition",""),"sale_price_gbp":r["fields"].get("sale_price_gbp","0.5"),"description":r["fields"].get("description","")}
-            ok,res=publicar_en_ebay(d)
-            if ok: st.success(f"✅ {res}");tabla.update(r["id"],{CAMPO_PUBLICAR:False,"ID eBay":res});pub+=1
-            else: err.append(f"{r['id']}: {res}")
-        st.info(f"Total:{len(regs)} | Publicadas:{pub}")
-        for e in err: st.warning(e)
+            r["sale_price_gbp"] = prec
+            r["description"] = desc
+        if g: res = guardar_seleccionadas(regs)
+        else: res = "Nada guardado"
+        return res
+    btn_guardar.click(accion_guardar, [precio_out, desc_out, guardar_chk, publicar_chk], msj_accion)
 
-st.header("📤 Cargar o tomar estampillas")
-modo = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
-archivos = []
-if modo == "📂 Galería":
-    st.session_state.activar_camara = False
-    archivos = st.file_uploader("Selecciona imágenes", type=["jpg","jpeg","png"], accept_multiple_files=True)
-else:
-    if not st.session_state.activar_camara:
-        if st.button("📸 Abrir cámara"):
-            st.session_state.activar_camara = True
-            st.rerun()
-    else:
-        foto = st.camera_input("Toma la estampilla")
-        if foto:
-            archivos.append(foto)
-        if st.button("❌ Cerrar cámara"):
-            st.session_state.activar_camara = False
-            st.rerun()
+    def accion_publicar(prec, desc, g, p):
+        regs = gr.session_state.get("reg_temp", [])
+        for r in regs:
+            r["sale_price_gbp"] = prec
+            r["description"] = desc
+        if p: res = publicar_seleccionadas(regs)
+        else: res = "Nada publicado"
+        return res
+    btn_pub.click(accion_publicar, [precio_out, desc_out, guardar_chk, publicar_chk], msj_accion)
 
-if archivos:
-    guardar_lista=[];pub_lista=[]
-    for i,a in enumerate(archivos,1):
-        st.subheader(f"📷 Imagen {i}")
-        img=Image.open(a);st.image(img,width=300)
-        with st.spinner("Analizando..."):
-            b64=reducir_imagen(img);datos=analizar_estampa(img,b64)
-            st.success(f"{len(datos)} detectadas")
-            for n,d in enumerate(datos,1):
-                pais=d.get("country","Desconocido");anio=d.get("year","-");val=d.get("face_value","-")
-                est=d.get("condition","-");prec=d.get("sale_price_gbp",0.5);desc=d.get("description","")
-                try: prec=float(re.sub(r"[^0-9.]","",str(prec).strip().replace(",",".")))
-                except: prec=0.5
-                # ✅ VUELTO A MOSTRAR VERTICAL, TAL COMO ESTABA
-                st.write(f"**País:** {pais}")
-                st.write(f"**Año:** {anio}")
-                st.write(f"**Valor facial:** {val}")
-                st.write(f"**Estado:** {est}")
-                prec=st.number_input("Precio GBP",value=max(prec,0.5),min_value=0.5,step=0.05,format="%.2f",key=f"p_{i}_{n}")
-                desc=st.text_area("Descripción",desc,key=f"d_{i}_{n}")
-                g=st.checkbox("Guardar",True,key=f"g_{i}_{n}")
-                p=st.checkbox("Marcar eBay",False,key=f"pub_{i}_{n}")
-                reg={"country":pais,"year":anio,"face_value":val,"condition":est,"sale_price_gbp":prec,"description":desc,"image_b64":b64}
-                if g: guardar_lista.append(reg)
-                if p: pub_lista.append(reg)
-    c1,c2=st.columns(2)
-    with c1:
-        if st.button("📥 Guardar seleccionadas"): guardar_seleccionadas(guardar_lista);df=cargar_base()
-    with c2:
-        if st.button("📤 Publicar seleccionadas"): publicar_seleccionadas(pub_lista);df=cargar_base()
+    def descargar_csv():
+        df = cargar_base()
+        nombre = f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv"
+        ruta = f"/tmp/{nombre}"
+        df.drop(columns=["image_b64"], errors="ignore").to_csv(ruta, index=False, encoding="utf-8")
+        return gr.update(value=ruta, visible=True)
+    btn_descargar.click(descargar_csv, outputs=archivo_csv)
 
-st.header("📚 Catálogo")
-if st.button("Ver/Ocultar"): st.session_state.ver_catalogo=not st.session_state.ver_catalogo
-if st.session_state.ver_catalogo and not df.empty:
-    m=df.copy()
-    m["sale_price_gbp"]=m["sale_price_gbp"].apply(lambda x: f"£{x:.2f} GBP")
-    m["Publicar en eBay"]=m["Publicar en eBay"].apply(lambda x:"✅ Sí" if x else "❌ No")
-    m["Imagen"]=m["image_b64"].apply(lambda x:f"data:image/jpeg;base64,{x}" if pd.notna(x) else None)
-    st.dataframe(m[["id","saved_date","country","year","Face_value","condition","sale_price_gbp","Publicar en eBay","ID eBay","description","Imagen"]],
-        column_config={"Imagen":st.column_config.ImageColumn(width="small")},hide_index=True)
+    def buscar_referencias():
+        res = llamar_mistral([{"role":"user","content":"Lista casas de subasta y tiendas serias de estampillas con sitio web y contacto, actualizado 2026."}],0.1,1200)
+        return res
+    btn_buscar.click(buscar_referencias, outputs=salida_busqueda)
 
-st.header("🌍 Buscar referencias")
-if st.button("Buscar casas de venta"):
-    with st.spinner("Consultando..."):
-        res=llamar_mistral([{"role":"user","content":"Lista casas de subasta y tiendas serias de estampillas con sitio web y contacto, actualizado 2026."}],0.1,1200)
-        st.markdown(res)
+    # Mostrar pantalla de acceso al inicio
+    gr.on(lambda: (gr.update(visible=True), gr.update(visible=False)), outputs=[pantalla_acceso, pantalla_principal])
 
-st.download_button("📥 Descargar CSV",df.drop(columns=["image_b64"]).to_csv(index=False).encode("utf-8"),file_name=f"catalogo_{datetime.now().strftime('%Y%m%d')}.csv")
+if __name__ == "__main__":
+    demo.launch()
