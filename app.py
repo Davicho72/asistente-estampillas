@@ -15,7 +15,7 @@ from pyairtable import Api
 # 🔒 CONTRASEÑA DE ACCESO
 CLAVE_CORRECTA = "AhoraNorbury2026"
 
-# 🔧 LECTURA DE CLAVES (IGUAL QUE ANTES, SIN CAMBIOS)
+# 🔧 LECTURA DE CLAVES
 EBAY_APP_ID = os.getenv("EBAY_CLIENT_ID", "")
 EBAY_CERT_ID = os.getenv("EBAY_CLIENT_SECRET", "")
 EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
@@ -32,7 +32,7 @@ CATEGORIA_EBAY = "260"
 MONEDA_EBAY = "GBP"
 CAMPO_PUBLICAR = "Publicar en eBay"
 
-# 🔧 TODAS LAS FUNCIONES (SIN MODIFICAR NADA)
+# 🔧 FUNCIONES AUXILIARES
 def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     if not MISTRAL_API_KEY:
         return "ERROR: MISTRAL_API_KEY no configurada"
@@ -64,12 +64,12 @@ def publicar_en_ebay(datos):
         precio = float(re.sub(r"[^0-9.]", "", str(datos.get("sale_price_gbp", "0.5")).strip().replace(",", ".")))
     except: precio = 0.5
     if precio <= 0: return False, "Precio inválido"
-    titulo = f"Estampilla {datos['country']} {datos['year'] or ''} - {datos['condition']}"[:80]
+    titulo = f"Estampilla {datos['country']} {datos.get('year','')} - {datos['condition']}"[:80]
     desc = f"""País: {datos['country']}
-Año: {datos['year'] or 'Sin dato'}
-Valor facial: {datos['face_value'] or 'Sin dato'}
-Estado: {datos['condition'] or 'Sin dato'}
-Detalles: {datos['description'] or 'Sin detalles'}
+Año: {datos.get('year','Sin dato')}
+Valor facial: {datos.get('face_value','Sin dato')}
+Estado: {datos.get('condition','Sin dato')}
+Detalles: {datos.get('description','Sin detalles')}
 Envío desde Reino Unido."""
     xml = f"""<?xml version="1.0"?>
     <AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
@@ -169,19 +169,17 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🖥️ INTERFAZ GRADIO — SOLO CAMBIÉ webcam_props → webcam_options
+# 🖥️ INTERFAZ GRADIO
 with gr.Blocks(title="Asistente Estampillas") as demo:
     gr.Markdown("# 📮 Asistente de Estampillas")
     auth_ok = gr.State(False)
     datos_temp = gr.State([])
 
-    # PANTALLA DE ACCESO
     with gr.Group(visible=True) as pantalla_login:
         clave_input = gr.Textbox("Contraseña", type="password")
         btn_entrar = gr.Button("Ingresar", variant="primary")
         msj_login = gr.Markdown()
 
-    # PANTALLA PRINCIPAL
     with gr.Group(visible=False) as pantalla_main:
         gr.Markdown("### " + ("✅ Conectado a Airtable" if CONECTADO else "⚠️ Sin conexión Airtable"))
 
@@ -192,7 +190,6 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         gr.Markdown("## 📤 Cargar o tomar estampillas")
         modo_subida = gr.Radio(["📂 Galería", "📸 Tomar foto"], value="📸 Tomar foto")
         
-        # ✅ CAMBIO EXACTO: webcam_props → webcam_options
         camara = gr.Image(
             sources=["webcam"],
             type="pil",
@@ -221,7 +218,6 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         btn_buscar = gr.Button("Buscar casas de venta")
         res_busqueda = gr.Markdown()
 
-    # LÓGICA DE ACCESO
     def comprobar_clave(c):
         if c == CLAVE_CORRECTA:
             return True, gr.update(visible=False), gr.update(visible=True), ""
@@ -230,12 +226,10 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         return False, gr.update(visible=True), gr.update(visible=False), ""
     btn_entrar.click(comprobar_clave, clave_input, [auth_ok, pantalla_login, pantalla_main, msj_login])
 
-    # CAMBIO DE MODO
     def cambiar_modo(m):
         return gr.update(visible=(m=="📸 Tomar foto")), gr.update(visible=(m=="📂 Galería"))
     modo_subida.change(cambiar_modo, modo_subida, [camara, archivos_subida])
 
-    # PROCESAMIENTO
     def procesar(cam, archs):
         imgs = []
         if cam: imgs.append(cam)
@@ -260,7 +254,6 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         return "\n\n".join(texto_salida), max(prec,0.5), desc, lista_reg
     btn_analizar.click(procesar, [camara, archivos_subida], [info_datos, precio_final, desc_final, datos_temp])
 
-    # ACCIONES
     def accion_guardar(prec, desc, g, p, regs):
         for r in regs:
             r["sale_price_gbp"] = prec
@@ -286,5 +279,6 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         return llamar_mistral([{"role":"user","content":"Lista casas de subasta y tiendas serias de estampillas con sitio web y contacto, actualizado 2026."}],0.1,1200)
     btn_buscar.click(buscar, outputs=res_busqueda)
 
+# ✅ ÚNICA MODIFICACIÓN: Configuración del puerto para Render
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 10000)))
