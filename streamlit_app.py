@@ -256,7 +256,11 @@ if archivos:
                 est=d.get("condition","-");prec=d.get("sale_price_gbp",0.5);desc=d.get("description","")
                 try: prec=float(re.sub(r"[^0-9.]","",str(prec).strip().replace(",",".")))
                 except: prec=0.5
-                st.write(f"- País: {pais} | Año: {anio} | Valor: {val} | Estado: {est}")
+                # ✅ VUELTO A MOSTRAR VERTICAL, TAL COMO ESTABA
+                st.write(f"**País:** {pais}")
+                st.write(f"**Año:** {anio}")
+                st.write(f"**Valor facial:** {val}")
+                st.write(f"**Estado:** {est}")
                 prec=st.number_input("Precio GBP",value=max(prec,0.5),min_value=0.5,step=0.05,format="%.2f",key=f"p_{i}_{n}")
                 desc=st.text_area("Descripción",desc,key=f"d_{i}_{n}")
                 g=st.checkbox("Guardar",True,key=f"g_{i}_{n}")
