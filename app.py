@@ -169,7 +169,7 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🖥️ INTERFAZ GRADIO (CÁMARA DIRECTA A TRASERA)
+# 🖥️ INTERFAZ GRADIO — SOLO CAMBIÉ webcam_props → webcam_options
 with gr.Blocks(title="Asistente Estampillas") as demo:
     gr.Markdown("# 📮 Asistente de Estampillas")
     auth_ok = gr.State(False)
@@ -192,11 +192,11 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         gr.Markdown("## 📤 Cargar o tomar estampillas")
         modo_subida = gr.Radio(["📂 Galería", "📸 Tomar foto"], value="📸 Tomar foto")
         
-        # ✅ CÁMARA FORZADA A TRASERA + 1080p
+        # ✅ CAMBIO EXACTO: webcam_props → webcam_options
         camara = gr.Image(
             sources=["webcam"],
             type="pil",
-            webcam_props={"facingMode": "environment", "width": {"ideal":1280}, "height": {"ideal":720}},
+            webcam_options={"facingMode": "environment", "width": {"ideal":1280}, "height": {"ideal":720}},
             label="📸 Cámara trasera",
             visible=True
         )
@@ -235,7 +235,7 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         return gr.update(visible=(m=="📸 Tomar foto")), gr.update(visible=(m=="📂 Galería"))
     modo_subida.change(cambiar_modo, modo_subida, [camara, archivos_subida])
 
-    # PROCESAMIENTO (MUESTRA DATOS VERTICAL)
+    # PROCESAMIENTO
     def procesar(cam, archs):
         imgs = []
         if cam: imgs.append(cam)
