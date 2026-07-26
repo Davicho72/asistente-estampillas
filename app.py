@@ -169,8 +169,8 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🖥️ INTERFAZ GRADIO
-with gr.Blocks(title="Asistente Estampillas") as demo:
+# 🖥️ INTERFAZ — TEMA CLÁSICO, CÁMARA TRASERA FIJA, TAMAÑO AJUSTADO
+with gr.Blocks(title="Asistente Estampillas", theme=gr.themes.Glass()) as demo:
     gr.Markdown("# 📮 Asistente de Estampillas")
     auth_ok = gr.State(False)
     datos_temp = gr.State([])
@@ -190,12 +190,18 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         gr.Markdown("## 📤 Cargar o tomar estampillas")
         modo_subida = gr.Radio(["📂 Galería", "📸 Tomar foto"], value="📸 Tomar foto")
         
+        # ✅ FUERZA CÁMARA TRASERA + TAMAÑO AJUSTADO PARA VER BOTONES
         camara = gr.Image(
             sources=["webcam"],
             type="pil",
-            webcam_options={"facingMode": "environment", "width": {"ideal":1280}, "height": {"ideal":720}},
+            webcam_options={
+                "facingMode": "environment",
+                "width": {"ideal": 800, "max": 1000},
+                "height": {"ideal": 600, "max": 750}
+            },
             label="📸 Cámara trasera",
-            visible=True
+            visible=True,
+            height="auto"
         )
         archivos_subida = gr.File(file_types=["image"], file_count="multiple", label="Seleccionar imágenes", visible=False)
 
@@ -279,6 +285,6 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         return llamar_mistral([{"role":"user","content":"Lista casas de subasta y tiendas serias de estampillas con sitio web y contacto, actualizado 2026."}],0.1,1200)
     btn_buscar.click(buscar, outputs=res_busqueda)
 
-# ✅ ÚNICA MODIFICACIÓN: Configuración del puerto para Render
+# ✅ PUERTO CORREGIDO PARA RENDER
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 10000)))
