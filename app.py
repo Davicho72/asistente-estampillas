@@ -15,7 +15,7 @@ from pyairtable import Api
 # 🔒 CONTRASEÑA
 CLAVE_CORRECTA = "AhoraNorbury2026"
 
-# 🔧 CLAVES
+# 🔧 CLAVES DE SERVICIOS
 EBAY_APP_ID = os.getenv("EBAY_CLIENT_ID", "")
 EBAY_CERT_ID = os.getenv("EBAY_CLIENT_SECRET", "")
 EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
@@ -31,7 +31,7 @@ EBAY_SITIO = "3"
 CATEGORIA_EBAY = "260"
 MONEDA_EBAY = "GBP"
 
-# 🔧 FUNCIONES
+# 🔧 FUNCIONES AUXILIARES
 def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     if not MISTRAL_API_KEY:
         return "ERROR: MISTRAL_API_KEY no configurada"
@@ -168,7 +168,7 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🖥️ INTERFAZ — SIN TEMA ADICIONAL (APARIENCIA ORIGINAL) + CÁMARA TRASERA FIJA
+# 🖥️ INTERFAZ FINAL
 with gr.Blocks(title="Asistente Estampillas") as demo:
     gr.Markdown("# 📮 Asistente de Estampillas")
     auth_ok = gr.State(False)
@@ -189,16 +189,15 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         gr.Markdown("## 📤 Cargar o tomar estampillas")
         modo_subida = gr.Radio(["📂 Galería", "📸 Tomar foto"], value="📸 Tomar foto")
         
-        # ✅ CÁMARA TRASERA SIEMPRE + TAMAÑO CONTROLADO
         camara = gr.Image(
             sources=["webcam"],
             type="pil",
             webcam_options={
-                "facingMode": "environment",
+                "facingMode": "user",
                 "width": {"ideal": 640, "max": 900},
                 "height": {"ideal": 480, "max": 650}
             },
-            label="📸 Cámara trasera",
+            label="📸 Cámara delantera",
             visible=True
         )
         archivos_subida = gr.File(file_types=["image"], file_count="multiple", label="Seleccionar imágenes", visible=False)
@@ -283,6 +282,5 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         return llamar_mistral([{"role":"user","content":"Lista casas de subasta y tiendas serias de estampillas con sitio web y contacto, actualizado 2026."}],0.1,1200)
     btn_buscar.click(buscar, outputs=res_busqueda)
 
-# ✅ PUERTO CORREGIDO PARA RENDER
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", server_port=int(os.environ.get("PORT", 10000)))
