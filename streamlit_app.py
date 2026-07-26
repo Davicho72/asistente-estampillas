@@ -11,8 +11,6 @@ import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pyairtable import Api
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import av
 
 # 🔒 CONTRASEÑA DE ACCESO
 if "autenticado" not in st.session_state:
@@ -51,7 +49,7 @@ st.markdown("""
 html, body, .stApp {width:100%!important;max-width:100%!important;overflow-x:hidden!important;margin:0!important;padding:0.5rem!important;}
 * {box-sizing:border-box!important;}
 .stButton>button {width:100%!important;min-height:48px!important;font-size:16px!important;margin:0.4rem 0!important;}
-.stFileUploader, .stTextArea, .stCheckbox {width:100%!important;font-size:15px!important;}
+.stFileUploader, .stCameraInput, .stTextArea, .stCheckbox {width:100%!important;font-size:15px!important;}
 h1 {font-size:22px!important;}h2 {font-size:20px!important;}h3 {font-size:18px!important;}
 img, .stDataFrame, .stTable {max-width:100%!important;height:auto!important;}
 [data-testid="stSidebar"] {display:none!important;}
@@ -203,19 +201,11 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 📸 MEJORADA: CÁMARA DIRECTA CON MAYOR RESOLUCIÓN Y ENFOQUE ESTABLE
-class CapturaFoto(VideoTransformerBase):
-    def __init__(self):
-        self.imagen_capturada = None
-    def transform(self, frame):
-        self.imagen_capturada = frame.to_image()
-        return frame
-
-# 🖥️ INTERFAZ PRINCIPAL
+# 🖥️ INTERFAZ FINAL
 st.title("📮 Asistente de Estampillas")
 if CONECTADO: st.success("Conectado a Airtable")
 df=cargar_base()
-for k in ["ver_catalogo"]:
+for k in ["activar_camara","ver_catalogo"]:
     if k not in st.session_state: st.session_state[k]=False
 
 st.header("🚀 Publicar desde Airtable")
@@ -235,27 +225,23 @@ if st.button("🔍 Revisar y publicar"):
         for e in err: st.warning(e)
 
 st.header("📤 Cargar o tomar estampillas")
-modo=st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
-archivos=[]
-
+modo = st.radio("Elige cómo subir:", ["📂 Galería", "📸 Tomar foto"])
+archivos = []
 if modo == "📂 Galería":
+    st.session_state.activar_camara = False
     archivos = st.file_uploader("Selecciona imágenes", type=["jpg","jpeg","png"], accept_multiple_files=True)
-
 else:
-    st.subheader("📸 Cámara directa")
-    ctx = webrtc_streamer(
-        key="camara_estampillas",
-        video_processor_factory=CapturaFoto,
-        media_stream_constraints={"video": {"width": 1280, "height": 720, "facingMode": "environment"}, "audio": False},
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-    )
-    if ctx.video_processor and ctx.video_processor.imagen_capturada and st.button("✅ Tomar estampilla"):
-        img = ctx.video_processor.imagen_capturada
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        buf.seek(0)
-        archivos.append(buf)
-        st.image(img, width=350, caption="Estampilla capturada")
+    if not st.session_state.activar_camara:
+        if st.button("📸 Abrir cámara"):
+            st.session_state.activar_camara = True
+            st.rerun()
+    else:
+        foto = st.camera_input("Toma la estampilla")
+        if foto:
+            archivos.append(foto)
+        if st.button("❌ Cerrar cámara"):
+            st.session_state.activar_camara = False
+            st.rerun()
 
 if archivos:
     guardar_lista=[];pub_lista=[]
