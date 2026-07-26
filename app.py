@@ -193,11 +193,11 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
             sources=["webcam"],
             type="pil",
             webcam_options={
-                "facingMode": "user",
-                "width": {"ideal": 640, "max": 900},
-                "height": {"ideal": 480, "max": 650}
+                "facingMode": "environment",
+                "width": 640,
+                "height": 480
             },
-            label="📸 Cámara delantera",
+            label="📸 Cámara trasera",
             visible=True
         )
         archivos_subida = gr.File(file_types=["image"], file_count="multiple", label="Seleccionar imágenes", visible=False)
