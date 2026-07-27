@@ -33,7 +33,7 @@ EBAY_CERT_ID = st.secrets.get("EBAY_CLIENT_SECRET", "")
 EBAY_DEV_ID = st.secrets.get("EBAY_DEV_ID", "")
 EBAY_REFRESH_TOKEN = st.secrets.get("EBAY_REFRESH_TOKEN", "")
 
-# CONFIGURACIÓN GENERAL Y ESTILO ORIGINAL
+# CONFIGURACIÓN GENERAL
 st.set_page_config(
     page_title="Asistente Estampillas",
     layout="wide",
@@ -371,7 +371,7 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# INTERFAZ PRINCIPAL — CAMARA TRASERA POR DEFECTO
+# INTERFAZ PRINCIPAL
 st.title("📮 Asistente de Estampillas")
 if CONECTADO_AIRTABLE: st.success("Conectado a Airtable")
 df=cargar_base_datos()
@@ -389,12 +389,11 @@ if modo == "📂 Galería":
     archivos = st.file_uploader("Selecciona imágenes", type=["jpg","jpeg","png"], accept_multiple_files=True)
 else:
     if not st.session_state.activar_camara:
-        if st.button("📸 Abrir cámara trasera"):
+        if st.button("📸 Abrir cámara"):
             st.session_state.activar_camara = True
             st.rerun()
     else:
-        # ✅ CÁMARA TRASERA FORZADA
-        foto = st.camera_input("Toma la estampilla", key="camara_trasera")
+        foto = st.camera_input("Toma la estampilla")
         if foto:
             archivos.append(foto)
         if st.button("❌ Cerrar cámara"):
