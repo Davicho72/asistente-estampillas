@@ -31,7 +31,7 @@ EBAY_SITIO = "3"
 CATEGORIA_EBAY = "260"
 MONEDA_EBAY = "GBP"
 
-# 🔧 FUNCIONES AUXILIARES
+# 🔧 FUNCIONES
 def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     if not MISTRAL_API_KEY:
         return "ERROR: MISTRAL_API_KEY no configurada"
@@ -168,7 +168,7 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🖥️ INTERFAZ FINAL
+# 🖥️ INTERFAZ — CÁMARA TRASERA SIEMPRE
 with gr.Blocks(title="Asistente Estampillas") as demo:
     gr.Markdown("# 📮 Asistente de Estampillas")
     auth_ok = gr.State(False)
