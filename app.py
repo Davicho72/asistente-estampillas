@@ -31,28 +31,31 @@ def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     cabeceras = {"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"}
     mensajes_formateados = []
     for m in mensajes:
-        mensajes_formateados.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}] if isinstance(m["content"], str) else m["content"]})
+        if isinstance(m["content"], str):
+            mensajes_formateados.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
+        else:
+            mensajes_formateados.append(m)
     try:
-        resp = requests.post(MISTRAL_URL, headers=cabeceras, json={"model": MISTRAL_MODEL, "messages": mensajes_formateados, "temperature": temperatura, "max_tokens": max_tokens}, timeout=90)
+        resp = requests.post(MISTRAL_URL, headers=cabeceras, json={
+            "model": MISTRAL_MODEL, "messages": mensajes_formateados,
+            "temperature": temperatura, "max_tokens": max_tokens
+        }, timeout=90)
         return resp.json()["choices"][0]["message"]["content"] if resp.ok else f"ERROR API: {resp.status_code}"
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-EBAY_SITIO = "3"
-CATEGORIA_EBAY = "260"
-MONEDA_EBAY = "GBP"
+EBAY_SITIO, CATEGORIA_EBAY, MONEDA_EBAY = "3", "260", "GBP"
 
 def obtener_token_ebay():
-    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN]):
-        return None
-    auth_b64 = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode("utf-8")).decode("utf-8")
-    cabeceras = {"Authorization": f"Basic {auth_b64}", "Content-Type": "application/x-www-form-urlencoded"}
-    datos = {"grant_type": "refresh_token", "refresh_token": EBAY_REFRESH_TOKEN, "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.item https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment"}
+    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN]): return None
+    auth_b64 = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()).decode()
     try:
-        resp = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=cabeceras, data=datos, timeout=30)
+        resp = requests.post("https://api.ebay.com/identity/v1/oauth2/token",
+            headers={"Authorization": f"Basic {auth_b64}", "Content-Type": "application/x-www-form-urlencoded"},
+            data={"grant_type": "refresh_token", "refresh_token": EBAY_REFRESH_TOKEN,
+                  "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.item https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment"}, timeout=30)
         return resp.json()["access_token"] if resp.ok else None
-    except:
-        return None
+    except: return None
 
 def publicar_en_ebay(datos):
     EBAY_TOKEN = obtener_token_ebay()
@@ -102,10 +105,9 @@ def publicar_en_ebay(datos):
         resp = requests.post(url, data=xml.encode("utf-8"), headers=cabeceras, timeout=60)
         if resp.status_code != 200:
             return False, f"Error {resp.status_code}"
-        ns = {"ebay": "urn:ebay:apis:eBLBaseComponents"}
         raiz = ET.fromstring(resp.text)
-        id_anuncio = raiz.find("ebay:ItemID", ns)
-        return (True, f"✅ Publicado | ID: {id_anuncio.text}") if id_anuncio is not None else (True, "✅ Publicado correctamente")
+        id_anuncio = raiz.find("{urn:ebay:apis:eBLBaseComponents}ItemID")
+        return (True, f"✅ Publicado | ID: {id_anuncio.text}") if id_anuncio is not None else (True, "✅ Publicado")
     except Exception as e:
         return False, f"Fallo: {str(e)}"
 
@@ -114,11 +116,10 @@ try:
     api_airtable = Api(os.getenv("AIRTABLE_API_KEY"))
     tabla_airtable = api_airtable.table(os.getenv("AIRTABLE_BASE_ID"), os.getenv("AIRTABLE_TABLA"))
     CONECTADO_AIRTABLE = True
-except:
-    pass
+except: pass
 
 def reducir_imagen(img):
-    if img.mode in ("RGBA", "P"):
+    if img.mode in ("RGBA","P"):
         fondo = Image.new("RGB", img.size, (255,255,255))
         fondo.paste(img, mask=img.split()[3] if img.mode=="RGBA" else None)
         img = fondo
@@ -127,7 +128,7 @@ def reducir_imagen(img):
     img = img.resize((350, int(img.height*(350/img.width))), Image.Resampling.BILINEAR)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=70)
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+    return base64.b64encode(buf.getvalue()).decode()
 
 def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
@@ -145,8 +146,8 @@ def analizar_estampa(img, b64):
             time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🎨 INTERFAZ SIN ESTILOS FORZADOS - TAMAÑOS NATURALES
-with gr.Blocks(title="Asistente Estampillas") as demo:
+# 🎨 REGLA EXACTA: BOTONES DE ANCHO AUTOMÁTICO
+with gr.Blocks(css=".gr-button { width: auto !important; }", title="Asistente Estampillas") as demo:
 
     with gr.Column() as pantalla_acceso:
         gr.Markdown("### 🔒 Acceso restringido")
