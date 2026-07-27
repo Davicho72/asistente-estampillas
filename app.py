@@ -15,7 +15,7 @@ from pyairtable import Api
 # 🔒 CONTRASEÑA
 CLAVE_CORRECTA = "AhoraNorbury2026"
 
-# 🔧 CLAVES
+# 🔧 CLAVES DE ENTORNO
 EBAY_APP_ID = os.getenv("EBAY_CLIENT_ID", "")
 EBAY_CERT_ID = os.getenv("EBAY_CLIENT_SECRET", "")
 EBAY_DEV_ID = os.getenv("EBAY_DEV_ID", "")
@@ -24,70 +24,110 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = "pixtral-12b-2409"
 
-# 🔧 FUNCIONES (SIN CAMBIOS)
+# 🔧 FUNCIONES
 def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     if not MISTRAL_API_KEY:
         return "ERROR: MISTRAL_API_KEY no configurada"
     cabeceras = {"Authorization": f"Bearer {MISTRAL_API_KEY}", "Content-Type": "application/json"}
     mensajes_formateados = []
     for m in mensajes:
-        if isinstance(m["content"], str):
-            mensajes_formateados.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}]})
-        else:
-            mensajes_formateados.append(m)
+        mensajes_formateados.append({"role": m["role"], "content": [{"type": "text", "text": m["content"]}] if isinstance(m["content"], str) else m["content"]})
     try:
         resp = requests.post(MISTRAL_URL, headers=cabeceras, json={"model": MISTRAL_MODEL, "messages": mensajes_formateados, "temperature": temperatura, "max_tokens": max_tokens}, timeout=90)
         return resp.json()["choices"][0]["message"]["content"] if resp.ok else f"ERROR API: {resp.status_code}"
     except Exception as e:
         return f"Error conexión: {str(e)}"
 
-EBAY_SITIO, CATEGORIA_EBAY, MONEDA_EBAY = "3", "260", "GBP"
+EBAY_SITIO = "3"
+CATEGORIA_EBAY = "260"
+MONEDA_EBAY = "GBP"
 
 def obtener_token_ebay():
-    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN]): return None
-    auth_b64 = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode()).decode()
+    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_REFRESH_TOKEN]):
+        return None
+    auth_b64 = base64.b64encode(f"{EBAY_APP_ID}:{EBAY_CERT_ID}".encode("utf-8")).decode("utf-8")
+    cabeceras = {"Authorization": f"Basic {auth_b64}", "Content-Type": "application/x-www-form-urlencoded"}
+    datos = {"grant_type": "refresh_token", "refresh_token": EBAY_REFRESH_TOKEN, "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.item https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment"}
     try:
-        resp = requests.post("https://api.ebay.com/identity/v1/oauth2/token",
-            headers={"Authorization": f"Basic {auth_b64}", "Content-Type": "application/x-www-form-urlencoded"},
-            data={"grant_type": "refresh_token", "refresh_token": EBAY_REFRESH_TOKEN, "scope": "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.item https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.fulfillment"}, timeout=30)
+        resp = requests.post("https://api.ebay.com/identity/v1/oauth2/token", headers=cabeceras, data=datos, timeout=30)
         return resp.json()["access_token"] if resp.ok else None
-    except: return None
+    except:
+        return None
 
 def publicar_en_ebay(datos):
     EBAY_TOKEN = obtener_token_ebay()
-    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]): return False, "Faltan claves"
-    try: precio_num = float(str(datos.get("sale_price_gbp","0.5")).strip().replace(",","."))
-    except: precio_num = 0.5
-    if precio_num <= 0: return False, "Precio no válido"
+    if not all([EBAY_APP_ID, EBAY_CERT_ID, EBAY_DEV_ID, EBAY_TOKEN]):
+        return False, "Faltan claves de eBay"
+    try:
+        precio_num = float(str(datos.get("sale_price_gbp", "0.5")).strip().replace(",", "."))
+    except:
+        precio_num = 0.5
+    if precio_num <= 0:
+        return False, "Precio no válido"
     url = "https://api.ebay.com/ws/api.dll"
-    cabeceras = {"X-EBAY-API-CALL-NAME":"AddFixedPriceItem","X-EBAY-API-APP-NAME":EBAY_APP_ID,"X-EBAY-API-DEV-NAME":EBAY_DEV_ID,"X-EBAY-API-CERT-NAME":EBAY_CERT_ID,"X-EBAY-API-SITEID":EBAY_SITIO,"X-EBAY-API-COMPATIBILITY-LEVEL":"967","Authorization":f"Bearer {EBAY_TOKEN}","Content-Type":"text/xml"}
+    cabeceras = {
+        "X-EBAY-API-CALL-NAME": "AddFixedPriceItem",
+        "X-EBAY-API-APP-NAME": EBAY_APP_ID,
+        "X-EBAY-API-DEV-NAME": EBAY_DEV_ID,
+        "X-EBAY-API-CERT-NAME": EBAY_CERT_ID,
+        "X-EBAY-API-SITEID": EBAY_SITIO,
+        "X-EBAY-API-COMPATIBILITY-LEVEL": "967",
+        "Authorization": f"Bearer {EBAY_TOKEN}",
+        "Content-Type": "text/xml"
+    }
     titulo = f"Estampilla {datos['country']} {datos.get('year','')} - {datos.get('condition','')}"[:80]
     descripcion = f"Estampilla auténtica.\nPaís: {datos['country']}\nAño: {datos.get('year','No especificado')}\nValor facial: {datos.get('face_value','No especificado')}\nEstado: {datos.get('condition','No especificado')}\nDetalles: {datos.get('description','Sin detalles')}\nEnvío desde Reino Unido."
-    xml = f'<?xml version="1.0" encoding="utf-8"?><AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents"><RequesterCredentials><eBayAuthToken>{EBAY_TOKEN}</eBayAuthToken></RequesterCredentials><Item><Title>{titulo}</Title><Description>{descripcion}</Description><Category>{CATEGORIA_EBAY}</Category><StartPrice currencyID="{MONEDA_EBAY}">{precio_num}</StartPrice><Quantity>1</Quantity><ListingDuration>GTC</ListingDuration><Country>GB</Country><Currency>{MONEDA_EBAY}</Currency><Location>Reino Unido</Location><ReturnPolicy><ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption><RefundOption>MoneyBack</RefundOption><ReturnsWithinOption>Days_30</ReturnsWithinOption><ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption></ReturnPolicy></Item></AddFixedPriceItemRequest>'
+    xml = f"""<?xml version="1.0" encoding="utf-8"?>
+    <AddFixedPriceItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+        <RequesterCredentials><eBayAuthToken>{EBAY_TOKEN}</eBayAuthToken></RequesterCredentials>
+        <Item>
+            <Title>{titulo}</Title>
+            <Description>{descripcion}</Description>
+            <Category>{CATEGORIA_EBAY}</Category>
+            <StartPrice currencyID="{MONEDA_EBAY}">{precio_num}</StartPrice>
+            <Quantity>1</Quantity>
+            <ListingDuration>GTC</ListingDuration>
+            <Country>GB</Country>
+            <Currency>{MONEDA_EBAY}</Currency>
+            <Location>Reino Unido</Location>
+            <ReturnPolicy>
+                <ReturnsAcceptedOption>ReturnsAccepted</ReturnsAcceptedOption>
+                <RefundOption>MoneyBack</RefundOption>
+                <ReturnsWithinOption>Days_30</ReturnsWithinOption>
+                <ShippingCostPaidByOption>Buyer</ShippingCostPaidByOption>
+            </ReturnPolicy>
+        </Item>
+    </AddFixedPriceItemRequest>"""
     try:
-        resp = requests.post(url, data=xml.encode(), headers=cabeceras, timeout=60)
-        if resp.status_code != 200: return False, f"Error {resp.status_code}"
+        resp = requests.post(url, data=xml.encode("utf-8"), headers=cabeceras, timeout=60)
+        if resp.status_code != 200:
+            return False, f"Error {resp.status_code}"
+        ns = {"ebay": "urn:ebay:apis:eBLBaseComponents"}
         raiz = ET.fromstring(resp.text)
-        id_anuncio = raiz.find("{urn:ebay:apis:eBLBaseComponents}ItemID")
-        return (True, f"✅ Publicado | ID: {id_anuncio.text}") if id_anuncio is not None else (True, "✅ Publicado")
-    except Exception as e: return False, f"Fallo: {str(e)}"
+        id_anuncio = raiz.find("ebay:ItemID", ns)
+        return (True, f"✅ Publicado | ID: {id_anuncio.text}") if id_anuncio is not None else (True, "✅ Publicado correctamente")
+    except Exception as e:
+        return False, f"Fallo: {str(e)}"
 
 CONECTADO_AIRTABLE = False
 try:
     api_airtable = Api(os.getenv("AIRTABLE_API_KEY"))
     tabla_airtable = api_airtable.table(os.getenv("AIRTABLE_BASE_ID"), os.getenv("AIRTABLE_TABLA"))
     CONECTADO_AIRTABLE = True
-except: pass
+except:
+    pass
 
 def reducir_imagen(img):
-    if img.mode in ("RGBA","P"):
+    if img.mode in ("RGBA", "P"):
         fondo = Image.new("RGB", img.size, (255,255,255))
         fondo.paste(img, mask=img.split()[3] if img.mode=="RGBA" else None)
         img = fondo
-    elif img.mode != "RGB": img = img.convert("RGB")
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
     img = img.resize((350, int(img.height*(350/img.width))), Image.Resampling.BILINEAR)
-    buf = io.BytesIO(); img.save(buf, format="JPEG", quality=70)
-    return base64.b64encode(buf.getvalue()).decode()
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=70)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 def extraer_json(texto):
     m = re.search(r'\[.*\]|\{.*\}', texto, re.DOTALL)
@@ -101,15 +141,12 @@ def analizar_estampa(img, b64):
             res = llamar_mistral([{"role":"user","content":[{"type":"text","text":instruccion},{"type":"image_url","image_url":{"url":f"data:image/jpeg;base64,{b64}"}}]}])
             d = extraer_json(res)
             return d if isinstance(d, list) else [d]
-        except: time.sleep(2)
+        except:
+            time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🎨 INTERFAZ: SIN REGLAS QUE FUERZAN ANCHO EN BOTONES
-with gr.Blocks(css="""
-h1 {font-size:22px;}
-h2 {font-size:20px;}
-h3 {font-size:18px;}
-""", title="Asistente Estampillas") as demo:
+# 🎨 INTERFAZ SIN ESTILOS FORZADOS - TAMAÑOS NATURALES
+with gr.Blocks(title="Asistente Estampillas") as demo:
 
     with gr.Column() as pantalla_acceso:
         gr.Markdown("### 🔒 Acceso restringido")
@@ -120,7 +157,8 @@ h3 {font-size:18px;}
 
     with gr.Column(visible=False) as pantalla_principal:
         gr.Markdown("# 📮 Asistente de Estampillas")
-        if CONECTADO_AIRTABLE: gr.Markdown("✅ Conectado a Airtable")
+        if CONECTADO_AIRTABLE:
+            gr.Markdown("✅ Conectado a Airtable")
 
         gr.Markdown("## 🚀 Publicar desde Airtable")
         gr.Button("🔍 Revisar y publicar")
@@ -148,11 +186,16 @@ h3 {font-size:18px;}
         gr.Button("📥 Descargar CSV")
 
     def verificar(clave):
-        if clave == CLAVE_CORRECTA: return gr.update(visible=False), gr.update(visible=True), ""
-        elif clave: return gr.update(), gr.update(), "❌ Contraseña incorrecta"
+        if clave == CLAVE_CORRECTA:
+            return gr.update(visible=False), gr.update(visible=True), ""
+        elif clave:
+            return gr.update(), gr.update(), "❌ Contraseña incorrecta"
         return gr.update(), gr.update(), ""
 
     btn_entrar.click(verificar, entrada_clave, [pantalla_acceso, pantalla_principal, msg_acceso])
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", 10000)))
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=int(os.getenv("PORT", 10000))
+    )
