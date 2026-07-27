@@ -24,7 +24,7 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 MISTRAL_URL = "https://api.mistral.ai/v1/chat/completions"
 MISTRAL_MODEL = "pixtral-12b-2409"
 
-# 🔧 FUNCIONES
+# 🔧 FUNCIONES (SIN CAMBIOS)
 def llamar_mistral(mensajes, temperatura=0.0, max_tokens=800):
     if not MISTRAL_API_KEY:
         return "ERROR: MISTRAL_API_KEY no configurada"
@@ -146,8 +146,10 @@ def analizar_estampa(img, b64):
             time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🎨 REGLA EXACTA: BOTONES DE ANCHO AUTOMÁTICO
-with gr.Blocks(css=".gr-button { width: auto !important; }", title="Asistente Estampillas") as demo:
+# 🎨 ESTILO FUERTE PARA ANULAR EL ANCHO POR DEFECTO DE GRADIO
+with gr.Blocks(css="""
+button.gr-button { width: auto !important; min-width: auto !important; }
+""", title="Asistente Estampillas") as demo:
 
     with gr.Column() as pantalla_acceso:
         gr.Markdown("### 🔒 Acceso restringido")
