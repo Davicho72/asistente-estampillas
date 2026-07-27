@@ -168,7 +168,7 @@ def analizar_estampa(img,b64):
         except: time.sleep(2)
     return [{"country":"Desconocido","year":"-","face_value":"-","condition":"-","sale_price_gbp":0.50,"description":"Error análisis"}]
 
-# 🖥️ INTERFAZ — CÁMARA TRASERA SIEMPRE
+# 🖥️ INTERFAZ — CÁMARA TRASERA COMPATIBLE
 with gr.Blocks(title="Asistente Estampillas") as demo:
     gr.Markdown("# 📮 Asistente de Estampillas")
     auth_ok = gr.State(False)
@@ -192,11 +192,7 @@ with gr.Blocks(title="Asistente Estampillas") as demo:
         camara = gr.Image(
             sources=["webcam"],
             type="pil",
-            webcam_options={
-                "facingMode": "environment",
-                "width": 640,
-                "height": 480
-            },
+            webcam_options={"facingMode": "environment"},
             label="📸 Cámara trasera",
             visible=True
         )
